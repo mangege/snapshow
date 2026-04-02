@@ -124,6 +124,9 @@
 3. **`_detect_gpu_encoder` 缓存**
    - 保持 `@lru_cache`（GPU 驱动运行时变化概率极低，无需 TTL 缓存）
 
+4. **删除未使用的 `audio_dir` 创建**（video.py:353-354）
+   - `audio_dir = work_dir / "audio"` 创建后从未被读取，删除此行
+
 **测试：**
 - mock FFmpeg 子进程
 - 测试 GPU 检测路径（nvenc/vaapi/qsv/amf/none）
@@ -222,12 +225,30 @@
    - `Label("语音:", id="voice_label")`
    - `Input(value="zh-CN-XiaoxiaoNeural", id="default_voice_input", width=20)`
 2. 添加 CSS `#controls_row2`：`height: 3; background: $surface; border-top: solid $panel; layout: horizontal; padding: 0 1;`，与 `#controls` 样式一致
-3. 在 `action_save()` 中从这些控件读取值：
-   - `fps = int(self.query_one("#project_fps_input", Input).value)`
-   - `width = int(self.query_one("#project_width_input", Input).value)`
-   - `height = int(self.query_one("#project_height_input", Input).value)`
-   - `voice = self.query_one("#default_voice_input", Input).value`
-4. 将读取的值写入 `config_dict` 的 `project` 和 `subtitles` 中
+3. 同步更新 `load_initial_config()`（tui.py:617-655），从加载的 config 中读取 fps/width/height 和 voice 填充到新 Input 控件：
+   - `project = config.get("project", {})` → 读取 `project.get("fps", 30)` 等
+   - 从第一个 subtitle 的 `voice.voice` 读取默认语音
+4. 在 `action_save()` 中从这些控件读取值，带错误处理：
+   ```python
+   try:
+       fps = int(self.query_one("#project_fps_input", Input).value or 30)
+   except ValueError:
+       fps = 30
+   try:
+       width = int(self.query_one("#project_width_input", Input).value or 1080)
+   except ValueError:
+       width = 1080
+   try:
+       height = int(self.query_one("#project_height_input", Input).value or 1920)
+   except ValueError:
+       height = 1920
+   voice = self.query_one("#default_voice_input", Input).value or "zh-CN-XiaoxiaoNeural"
+   ```
+5. 将读取的值写入 `config_dict`：
+   - `config_dict["project"]["fps"] = fps`
+   - `config_dict["project"]["width"] = width`
+   - `config_dict["project"]["height"] = height`
+   - 每个 subtitle 的 `"voice": {"voice": voice}`
 
 ### tui.py — 代码清理
 
@@ -256,6 +277,20 @@
    - 当前 `refresh_preview()`（tui.py:750-766）使用估算时长 `len(seg) * 0.25 + 0.5`
    - 改为：累积计算当前图片内每个 segment 的起止时间（从 00:00 开始），格式化为 `MM:SS - MM:SS`
    - 注意：这是相对当前图片的估算值，不跨图片累积（跨图片需要状态跟踪，留作后续扩展）
+   - 实现代码：
+     ```python
+     current_time = 0.0
+     for i, seg in enumerate(segments):
+         est_duration = len(seg) * 0.25 + 0.5
+         start_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
+         current_time += est_duration
+         end_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
+         item = ListItem(
+             Static(f"[b]{i + 1}.[/][segment-text] {seg} [/] [segment-meta]({start_mmss} - {end_mmss})[/]"),
+             classes="segment-item",
+         )
+         self.preview_list.append(item)
+     ```
 
 3. **侧栏收起**：当前 `watch_sidebar_hidden()`（tui.py:563-567）已设置 `sidebar.display = not sidebar_hidden`
    - 验证实际行为：如果 margin/padding 仍占空间，添加 CSS `sidebar_pane: { margin: 0; padding: 0; }` 配合 `display: none`
