@@ -1,4 +1,4 @@
-# img2vid
+# snapshow
 
 根据多张图片和字幕生成短视频的自动化工具。针对短视频平台（抖音、视频号、B站等）优化，默认生成 9:16 竖屏视频。
 
@@ -23,7 +23,7 @@
 ```bash
 # 克隆仓库
 git clone <repository-url>
-cd img2vid
+cd snapshow
 
 # 创建虚拟环境并安装依赖
 python -m venv .venv
@@ -41,10 +41,10 @@ pip install -r requirements.txt
 
 ```bash
 # 在当前目录启动
-python -m img2vid ui
+python -m snapshow ui
 
 # 或者指定一个项目目录启动
-python -m img2vid ui ./my_project
+python -m snapshow ui ./my_project
 ```
 
 - **界面说明**：
@@ -66,10 +66,10 @@ python -m img2vid ui ./my_project
 
 ```bash
 # 预览时间线
-python -m img2vid preview project.yaml
+python -m snapshow preview project.yaml
 
 # 生成视频
-python -m img2vid generate project.yaml
+python -m snapshow generate project.yaml
 ```
 
 ## 配置说明
@@ -88,10 +88,10 @@ python -m img2vid generate project.yaml
 
 ```bash
 # 查看支持的语音角色
-python -m img2vid voices
+python -m snapshow voices
 
 # 详细日志输出
-python -m img2vid generate project.yaml -v
+python -m snapshow generate project.yaml -v
 ```
 
 ## License

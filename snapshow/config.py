@@ -6,6 +6,8 @@ from typing import Optional
 
 import yaml
 
+from .user_config import load_user_config
+
 
 @dataclass
 class VoiceConfig:
@@ -34,7 +36,7 @@ class ImageConfig:
 
 @dataclass
 class SubtitleStyle:
-    font: str = "Arial"
+    font: str = ""  # 空字符串时自动检测中文字体
     font_size: int = 64
     font_color: str = "white"
     border_color: str = "black"
@@ -55,11 +57,14 @@ class ProjectConfig:
     transition_duration: float = 0.5
     output_dir: str = "./output"
     title: str = ""  # 视频开头的标题
-    logo: str = ""   # 视频结尾的 Logo 文字
+    logo: str = ""  # 视频结尾的 Logo 文字
+    powered_by: bool = True  # 是否在结尾显示 "Powered by snapshow"
 
 
-def load_config(config_path: str | Path) -> ProjectConfig:
-    """加载并解析配置文件"""
+def load_config(config_path: str | Path, use_user_config_fallback: bool = True) -> ProjectConfig:
+    """加载并解析配置文件
+    如果 use_user_config_fallback 为 True，则项目配置中未设置的字段会使用用户级配置
+    """
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
@@ -67,15 +72,24 @@ def load_config(config_path: str | Path) -> ProjectConfig:
     with open(config_path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    return _parse_config(raw)
+    user_config = load_user_config() if use_user_config_fallback else None
+    return _parse_config(raw, user_config)
 
 
-def _parse_config(raw: dict) -> ProjectConfig:
-    """解析原始字典为 ProjectConfig"""
+def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
+    """解析原始字典为 ProjectConfig
+    user_config 提供用户级默认配置
+    """
     project = raw.get("project", {})
     images_raw = raw.get("images", [])
     subtitles_raw = raw.get("subtitles", [])
     style_raw = raw.get("style", {})
+
+    uc_project = {}
+    uc_voice = {}
+    if user_config:
+        uc_project = user_config.get("project", {})
+        uc_voice = user_config.get("voice", {})
 
     images = [
         ImageConfig(
@@ -90,11 +104,11 @@ def _parse_config(raw: dict) -> ProjectConfig:
     for sub in subtitles_raw:
         voice_raw = sub.get("voice", {})
         voice = VoiceConfig(
-            engine=voice_raw.get("engine", "edge-tts"),
-            voice=voice_raw.get("voice", "zh-CN-XiaoxiaoNeural"),
-            rate=voice_raw.get("rate", "+0%"),
-            volume=voice_raw.get("volume", "+0%"),
-            pitch=voice_raw.get("pitch", "+0Hz"),
+            engine=voice_raw.get("engine", uc_voice.get("engine", "edge-tts")),
+            voice=voice_raw.get("voice", uc_voice.get("voice", "zh-CN-XiaoxiaoNeural")),
+            rate=voice_raw.get("rate", uc_voice.get("rate", "+0%")),
+            volume=voice_raw.get("volume", uc_voice.get("volume", "+0%")),
+            pitch=voice_raw.get("pitch", uc_voice.get("pitch", "+0Hz")),
         )
         subtitles.append(
             SubtitleConfig(
@@ -106,7 +120,7 @@ def _parse_config(raw: dict) -> ProjectConfig:
         )
 
     style = SubtitleStyle(
-        font=style_raw.get("font", "Arial"),
+        font=style_raw.get("font", ""),
         font_size=style_raw.get("font_size", 64),
         font_color=style_raw.get("font_color", "white"),
         border_color=style_raw.get("border_color", "black"),
@@ -116,17 +130,18 @@ def _parse_config(raw: dict) -> ProjectConfig:
     )
 
     return ProjectConfig(
-        name=project.get("name", "output"),
-        fps=project.get("fps", 30),
-        width=project.get("width", 1080),
-        height=project.get("height", 1920),
+        name=project.get("name", uc_project.get("name", "output")),
+        fps=project.get("fps", uc_project.get("fps", 30)),
+        width=project.get("width", uc_project.get("width", 1080)),
+        height=project.get("height", uc_project.get("height", 1920)),
         images=images,
         subtitles=subtitles,
         style=style,
-        transition_duration=project.get("transition_duration", 0.5),
-        output_dir=project.get("output_dir", "./output"),
-        title=project.get("title", ""),
-        logo=project.get("logo", ""),
+        transition_duration=project.get("transition_duration", uc_project.get("transition_duration", 0.5)),
+        output_dir=project.get("output_dir", uc_project.get("output_dir", "./output")),
+        title=project.get("title", uc_project.get("title", "")),
+        logo=project.get("logo", uc_project.get("logo", "")),
+        powered_by=project.get("powered_by", uc_project.get("powered_by", True)),
     )
 
 

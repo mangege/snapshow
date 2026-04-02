@@ -1,7 +1,7 @@
 """测试时间线计算模块"""
 
-from img2vid.config import ImageConfig, SubtitleConfig, VoiceConfig
-from img2vid.timeline import build_timeline
+from snapshow.config import ImageConfig, SubtitleConfig, VoiceConfig
+from snapshow.timeline import build_timeline
 
 
 class MockAudioInfo:

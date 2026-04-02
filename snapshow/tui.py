@@ -1,14 +1,18 @@
+import io
+import logging
 import re
+import threading
 from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    Checkbox,
     DirectoryTree,
     Footer,
     Header,
@@ -16,6 +20,7 @@ from textual.widgets import (
     Label,
     ListItem,
     ListView,
+    Select,
     Static,
     TextArea,
 )
@@ -48,7 +53,7 @@ class HelpScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="help_modal"):
-            yield Static("img2vid TUI 使用帮助", id="help_title")
+            yield Static("snapshow TUI 使用帮助", id="help_title")
             yield Static(
                 "全局快捷键:\n"
                 "  Ctrl+Q : 退出程序\n"
@@ -63,7 +68,7 @@ class HelpScreen(ModalScreen):
                 "  F5 : 聚焦 [预览分段列表]\n"
                 "  F6 : 聚焦 [图片文件列表]\n\n"
                 "按任意键返回主界面",
-                id="help_content"
+                id="help_content",
             )
 
     def on_key(self) -> None:
@@ -75,6 +80,7 @@ class HelpScreen(ModalScreen):
 
 class PreviewConfigModal(ModalScreen):
     """预览生成的 YAML 配置文件内容"""
+
     CSS = """
     PreviewConfigModal {
         align: center middle;
@@ -165,6 +171,241 @@ class LoadConfigModal(ModalScreen):
             self.dismiss(True)
         else:
             self.dismiss(False)
+
+
+RESOLUTION_PRESETS = [
+    ("竖屏 1080x1920", (1080, 1920)),
+    ("竖屏 720x1280", (720, 1280)),
+    ("横屏 1920x1080", (1920, 1080)),
+    ("横屏 1280x720", (1280, 720)),
+    ("正方形 1080x1080", (1080, 1080)),
+]
+
+
+def _resolve_resolution_label(width: int, height: int) -> int:
+    for i, (label, (w, h)) in enumerate(RESOLUTION_PRESETS):
+        if w == width and h == height:
+            return i
+    return 0
+
+
+class UserConfigEdit(ModalScreen):
+    """编辑用户级配置"""
+
+    CSS = """
+    UserConfigEdit {
+        align: center middle;
+    }
+    #uc_container {
+        width: 80%;
+        height: 80%;
+        border: round $primary;
+        background: $background;
+        padding: 1;
+    }
+    #uc_title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        color: $primary;
+    }
+    #uc_scroll {
+        height: 1fr;
+    }
+    .uc_row {
+        height: auto;
+        margin-bottom: 1;
+    }
+    .uc_row Label {
+        width: 12;
+        content-align: right middle;
+        margin-right: 1;
+    }
+    .uc_row Input, .uc_row Checkbox {
+        width: 1fr;
+    }
+    .uc_section_title {
+        text-style: bold underline;
+        color: $text;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    #uc_save_btn {
+        width: 100%;
+        margin-top: 1;
+    }
+    #uc_hint {
+        text-align: center;
+        color: $text-muted;
+        margin-top: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        from .user_config import load_user_config
+
+        uc = load_user_config()
+        project = uc.get("project", {})
+        voice = uc.get("voice", {})
+
+        with Vertical(id="uc_container"):
+            yield Static("用户级配置 (Ctrl+U)", id="uc_title")
+
+            with ScrollableContainer(id="uc_scroll"):
+                yield Static("项目默认设置", classes="uc_section_title")
+                with Horizontal(classes="uc_row"):
+                    yield Label("Logo:")
+                    yield Input(value=project.get("logo", ""), placeholder="视频结尾文字", id="uc_logo_input")
+                with Horizontal(classes="uc_row"):
+                    yield Label("片尾署名:")
+                    yield Checkbox(
+                        value=project.get("powered_by", True), id="uc_powered_by", label="显示 Powered by snapshow"
+                    )
+                with Horizontal(classes="uc_row"):
+                    yield Label("FPS:")
+                    yield Input(value=str(project.get("fps", 30)), id="uc_fps_input", type="integer")
+                with Horizontal(classes="uc_row"):
+                    yield Label("分辨率:")
+                    yield Select(
+                        options=[(label, i) for i, (label, _) in enumerate(RESOLUTION_PRESETS)],
+                        value=_resolve_resolution_label(project.get("width", 1080), project.get("height", 1920)),
+                        id="uc_resolution_select",
+                    )
+
+                yield Static("默认声音设置", classes="uc_section_title")
+                with Horizontal(classes="uc_row"):
+                    yield Label("声音:")
+                    yield Input(
+                        value=voice.get("voice", "zh-CN-XiaoxiaoNeural"),
+                        placeholder="edge-tts 声音",
+                        id="uc_voice_input",
+                    )
+                with Horizontal(classes="uc_row"):
+                    yield Label("语速:")
+                    yield Input(value=voice.get("rate", "+0%"), placeholder="+0%", id="uc_rate_input")
+                with Horizontal(classes="uc_row"):
+                    yield Label("音量:")
+                    yield Input(value=voice.get("volume", "+0%"), placeholder="+0%", id="uc_volume_input")
+                with Horizontal(classes="uc_row"):
+                    yield Label("音调:")
+                    yield Input(value=voice.get("pitch", "+0Hz"), placeholder="+0Hz", id="uc_pitch_input")
+
+            yield Button("保存用户配置", variant="primary", id="uc_save_btn")
+            yield Static("按 Esc 取消", id="uc_hint")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "uc_save_btn":
+            self.save_user_config()
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.app.pop_screen()
+
+    def save_user_config(self) -> None:
+        from .user_config import save_user_config
+
+        res_idx = self.query_one("#uc_resolution_select", Select).value
+        width, height = RESOLUTION_PRESETS[res_idx]
+
+        config = {
+            "project": {
+                "logo": self.query_one("#uc_logo_input", Input).value,
+                "powered_by": self.query_one("#uc_powered_by", Checkbox).value,
+                "fps": int(self.query_one("#uc_fps_input", Input).value or 30),
+                "width": width,
+                "height": height,
+            },
+            "voice": {
+                "engine": "edge-tts",
+                "voice": self.query_one("#uc_voice_input", Input).value,
+                "rate": self.query_one("#uc_rate_input", Input).value,
+                "volume": self.query_one("#uc_volume_input", Input).value,
+                "pitch": self.query_one("#uc_pitch_input", Input).value,
+            },
+        }
+        save_user_config(config)
+        self.notify("用户配置已保存至 ~/.config/snapshow/config.yaml", severity="information")
+        self.app.pop_screen()
+
+
+class UILogHandler(logging.Handler):
+    """自定义日志处理器，将日志消息转发到 UI"""
+
+    def __init__(self, log_screen):
+        super().__init__()
+        self.log_screen = log_screen
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        msg = self.format(record)
+        if self.log_screen.log_area is not None:
+            self.log_screen.app.call_from_thread(self._update_ui, msg)
+
+    def _update_ui(self, msg):
+        self.log_screen.log_buffer.write(msg + "\n")
+        self.log_screen.log_area.text = self.log_screen.log_buffer.getvalue()
+        self.log_screen.log_area.scroll_end(animate=False)
+
+
+class GenerationLogScreen(ModalScreen):
+    """视频生成日志显示弹窗"""
+
+    CSS = """
+    GenerationLogScreen {
+        align: center middle;
+    }
+    #gen_log_container {
+        width: 80%;
+        height: 80%;
+        border: round $primary;
+        background: $background;
+        padding: 1;
+    }
+    #gen_log_title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        color: $primary;
+    }
+    #gen_log_text {
+        height: 1fr;
+        border: none;
+        background: $surface;
+    }
+    #gen_log_status {
+        text-align: center;
+        color: $text-muted;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.log_buffer = io.StringIO()
+        self.finished = False
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="gen_log_container"):
+            yield Static("视频生成进度", id="gen_log_title")
+            self.log_area = TextArea("", id="gen_log_text", read_only=True)
+            yield self.log_area
+            self.status_label = Static("生成中...", id="gen_log_status")
+            yield self.status_label
+
+    def set_finished(self, success: bool, message: str = ""):
+        self.finished = True
+        if success:
+            self.status_label.update("生成完成！按任意键返回")
+        else:
+            self.status_label.update(f"生成失败: {message} 按任意键返回")
+
+    def on_key(self) -> None:
+        if self.finished:
+            self.app.pop_screen()
+
+    def on_click(self) -> None:
+        if self.finished:
+            self.app.pop_screen()
 
 
 class ImageFileTree(DirectoryTree):
@@ -323,6 +564,7 @@ class SubtitleTUI(App):
         Binding("ctrl+t", "toggle_theme", "主题", show=True),
         Binding("ctrl+b", "toggle_sidebar", "侧边栏", show=True),
         Binding("f1", "show_help", "帮助", show=True),
+        Binding("ctrl+u", "user_config", "用户配置", show=True),
         Binding("f2", "focus_editor", "编辑器", show=False),
         Binding("f5", "focus_preview", "聚焦预览", show=False),
         Binding("f6", "focus_sidebar", "资源", show=False),
@@ -335,6 +577,7 @@ class SubtitleTUI(App):
         self.max_chars = 15
 
     def on_mount(self) -> None:
+        self.theme = "textual-light"
         self.text_area.read_only = False
         # 设置初始 border title，显示当前文件夹名
         self.query_one("#sidebar_pane").border_title = f"图片列表 ({Path.cwd().name}) [F6]"
@@ -342,17 +585,34 @@ class SubtitleTUI(App):
         self.query_one("#preview_section").border_title = "分段预览 (F5)"
 
         # 动态更新 App 标题为完整路径
-        self.title = f"img2vid - {Path.cwd()}"
+        self.title = f"snapshow - {Path.cwd()}"
 
         # 启动时检测并询问是否加载
         if Path("project_tui.yaml").exists():
             self.push_screen(LoadConfigModal(), self.handle_load_decision)
+        else:
+            # 没有项目配置时，使用用户级配置默认值
+            self.apply_user_config_defaults()
+
+    def apply_user_config_defaults(self):
+        """应用用户级配置到 UI 字段"""
+        from .user_config import load_user_config
+
+        uc = load_user_config()
+        project = uc.get("project", {})
+        voice = uc.get("voice", {})
+        self.query_one("#project_logo_input", Input).value = project.get("logo", "")
+        self.query_one("#project_fps_input", Input).value = str(project.get("fps", 30))
+        self.query_one("#project_width_input", Input).value = str(project.get("width", 1080))
+        self.query_one("#project_height_input", Input).value = str(project.get("height", 1920))
+        self.query_one("#default_voice_input", Input).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
 
     def handle_load_decision(self, should_load: bool):
         if should_load:
             self.load_initial_config()
         else:
-            self.notify("已开始新项目 (未加载配置)")
+            self.apply_user_config_defaults()
+            self.notify("已开始新项目 (使用用户默认配置)")
 
     def load_initial_config(self):
         """尝试从 project_tui.yaml 加载配置"""
@@ -416,6 +676,10 @@ class SubtitleTUI(App):
 
     def action_focus_preview(self):
         self.query_one("#preview_list").focus()
+
+    def action_user_config(self):
+        """打开用户级配置编辑界面"""
+        self.push_screen(UserConfigEdit())
 
     def action_preview_config(self):
         """保存并预览当前的 YAML 配置"""
@@ -582,14 +846,27 @@ class SubtitleTUI(App):
     async def action_generate(self):
         """异步调用核心逻辑生成视频"""
         save_path = "project_tui.yaml"
-        self.action_save()  # 生成前先保存最新状态
+        self.action_save()
 
-        self.notify("正在后台生成视频，请稍候...", severity="information", timeout=10)
-        self.run_generation_task(save_path)
+        log_screen = GenerationLogScreen()
+        await self.push_screen(log_screen)
+
+        self.run_generation_task(save_path, log_screen)
 
     @work(thread=True)
-    def run_generation_task(self, config_path: str):
+    def run_generation_task(self, config_path: str, log_screen: GenerationLogScreen):
         """在后台线程中执行耗时的生成任务"""
+        ui_handler = UILogHandler(log_screen)
+
+        root_logger = logging.getLogger()
+        root_logger.addHandler(ui_handler)
+        root_logger.setLevel(logging.INFO)
+
+        for name in ["snapshow.video", "snapshow.voice", "snapshow"]:
+            logger = logging.getLogger(name)
+            logger.addHandler(ui_handler)
+            logger.setLevel(logging.INFO)
+
         try:
             import shutil
             import tempfile
@@ -618,7 +895,7 @@ class SubtitleTUI(App):
             )
 
             # 3. 生成视频
-            work_dir = Path(tempfile.mkdtemp()) / "img2vid_work"
+            work_dir = Path(tempfile.mkdtemp()) / "snapshow_work"
             work_dir.mkdir(parents=True, exist_ok=True)
 
             final_audio_dir = work_dir / "audio"
@@ -629,10 +906,15 @@ class SubtitleTUI(App):
                 audio_info[sub_id] = (new_path, duration)
 
             output_path = generate_video(config, timeline, work_dir, base_dir)
-            self.notify(f"视频生成成功！\n保存至: {output_path}", severity="information", timeout=15)
+
+            log_screen.app.call_from_thread(log_screen.set_finished, True, str(output_path))
 
         except Exception as e:
-            self.notify(f"生成失败: {str(e)}", severity="error", timeout=20, markup=False)
+            log_screen.app.call_from_thread(log_screen.set_finished, False, str(e))
+        finally:
+            root_logger.removeHandler(ui_handler)
+            for name in ["snapshow.video", "snapshow.voice", "snapshow"]:
+                logging.getLogger(name).removeHandler(ui_handler)
 
 
 if __name__ == "__main__":

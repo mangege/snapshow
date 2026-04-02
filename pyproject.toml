@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "img2vid"
+name = "snapshow"
 version = "0.1.0"
-description = "根据多图片和字幕生成配音视频的工具"
+description = "多张图片幻灯片加配音生成短视频"
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml>=6.0",
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-img2vid = "img2vid.cli:main"
+snapshow = "snapshow.cli:main"
 
 [project.optional-dependencies]
 dev = [

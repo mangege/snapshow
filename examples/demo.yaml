@@ -6,6 +6,7 @@ project:
   width: 1080
   height: 1920
   output_dir: "./output"
+  powered_by: true
 
 images:
   - id: img1
