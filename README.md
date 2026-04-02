@@ -1,64 +1,45 @@
 # img2vid
 
-根据多张图片和字幕生成配音视频的工具。
+根据多张图片和字幕生成短视频的自动化工具。针对短视频平台（抖音、视频号、B站等）优化，默认生成 9:16 竖屏视频。
 
 ## 功能
 
-- 多图片拼接成视频
-- 自动根据字幕生成配音（edge-tts）
-- 字幕与配音时间线精确对齐
-- 图片间淡入淡出转场
-- 可配置字幕样式
+- **竖屏优先**：默认 1080x1920 分辨率，完美适配移动端。
+- **高性能合成**：基于原生 FFmpeg 命令行，速度快、稳定性高，支持 GPU 加速（NVENC 等）。
+- **自动配音**：集成 `edge-tts`，支持多种高质量中英文语音。
+- **精准对齐**：字幕、音频与画面在帧级别精确同步，解决长视频结尾音画错位问题。
+- **动态转场**：支持图片间的平滑淡入淡出（xfade）。
+- **样式可调**：支持自定义字体、字号、描边及位置，默认避开短视频平台 UI 遮挡。
 
 ## 环境要求
 
 - Python 3.10+
-- FFmpeg（系统安装）
+- **FFmpeg**（必须在系统 PATH 中，推荐安装完整版以支持更多编码器）
 
 ## 安装
 
-### 方式一：requirements.txt（推荐）
-
 ```bash
+# 克隆仓库
+git clone <repository-url>
+cd img2vid
+
+# 创建虚拟环境并安装依赖
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate  # Windows
+
 pip install -r requirements.txt
-```
-
-### 方式二：pip 安装
-
-```bash
-pip install -e .
 ```
 
 ## 快速开始
 
-### 运行示例（推荐新手）
-
-仓库自带示例图片和配置，下载即可运行：
-
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 运行示例（在 examples 目录下）
-cd examples
-bash run_example.sh
-
-# 或者手动运行
-cd examples
-python -m img2vid preview demo.yaml
-python -m img2vid generate demo.yaml -o ./output
-```
-
-示例输出视频：`examples/output/demo_video.mp4`
-
-### 创建自己的项目
+### 1. 准备配置 (project.yaml)
 
 ```yaml
 project:
   name: "my_video"
-  fps: 30
-  width: 1920
-  height: 1080
+  width: 1080
+  height: 1920
 
 images:
   - id: img1
@@ -68,35 +49,18 @@ images:
 
 subtitles:
   - id: sub1
-    text: "这是第一段字幕"
+    text: "欢迎来到竖屏短视频时代"
     image: img1
     voice:
       voice: zh-CN-XiaoxiaoNeural
   - id: sub2
-    text: "切换到第二张图了"
+    text: "基于 FFmpeg 的极速合成体验"
     image: img2
     voice:
       voice: zh-CN-YunxiNeural
-
-style:
-  font_size: 48
-  font_color: white
-  position: bottom
 ```
 
 ### 2. 生成视频
-
-```bash
-# 方式一：使用 python -m
-python -m img2vid preview project.yaml
-python -m img2vid generate project.yaml
-
-# 方式二：使用 CLI 命令（pip install -e . 后）
-img2vid preview project.yaml
-img2vid generate project.yaml
-```
-
-### 3. 常用命令
 
 ```bash
 # 预览时间线
@@ -104,104 +68,54 @@ python -m img2vid preview project.yaml
 
 # 生成视频
 python -m img2vid generate project.yaml
-
-# 只看时间线，不生成
-python -m img2vid generate project.yaml --dry-run
-
-# 指定输出目录
-python -m img2vid generate project.yaml -o ./my_output
-
-# 详细日志
-python -m img2vid generate project.yaml -v
-
-# 查看可用语音
-python -m img2vid voices
 ```
+
+生成的视频将保存到 `./output/my_video.mp4`。
 
 ## 配置说明
 
-### 项目配置
+### 项目配置 (project)
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
 | name | 输出文件名 | output |
 | fps | 帧率 | 30 |
-| width | 视频宽度 | 1920 |
-| height | 视频高度 | 1080 |
+| **width** | 视频宽度 | **1080** |
+| **height** | 视频高度 | **1920** |
 | output_dir | 输出目录 | ./output |
 | transition_duration | 转场时长（秒） | 0.5 |
 
-### 图片配置
-| 字段 | 说明 | 必填 |
-|------|------|------|
-| id | 图片唯一标识 | 是 |
-| path | 图片路径（相对或绝对） | 是 |
-| duration | 固定时长（秒），不填则根据配音计算 | 否 |
-
-### 字幕配置
-| 字段 | 说明 | 必填 |
-|------|------|------|
-| id | 字幕唯一标识 | 是 |
-| text | 字幕文本 | 是 |
-| image | 关联的图片 ID | 是 |
-| voice.engine | 语音引擎 | edge-tts |
-| voice.voice | 语音角色 | zh-CN-XiaoxiaoNeural |
-| voice.rate | 语速调整（如 "+10%"） | +0% |
-| voice.pitch | 音调调整（如 "+10Hz"） | +0Hz |
-| voice.volume | 音量调整（如 "+10%"） | +0% |
-
-### 字幕样式
+### 字幕样式 (style)
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
-| font | 字体 | Arial |
-| font_size | 字号 | 48 |
+| font | 字体名称或路径 | Arial |
+| **font_size** | 字号 | **64** |
 | font_color | 字体颜色 | white |
 | border_color | 描边颜色 | black |
-| border_width | 描边宽度 | 2 |
-| position | 位置（top/center/bottom） | bottom |
-| margin_bottom | 底部边距 | 60 |
+| **border_width** | 描边宽度 | **3** |
+| position | 位置 (top/center/bottom) | bottom |
+| **margin_bottom** | 底部边距 | **200** |
 
-## 项目结构
-
-```
-img2vid/
-├── img2vid/
-│   ├── __init__.py
-│   ├── __main__.py     # python -m 入口
-│   ├── cli.py          # 命令行入口
-│   ├── config.py       # 配置解析
-│   ├── voice.py        # 配音生成
-│   ├── timeline.py     # 时间线计算
-│   └── video.py        # 视频合成
-├── examples/
-│   └── demo.yaml       # 示例配置
-├── tests/
-├── requirements.txt
-├── pyproject.toml
-└── README.md
-```
-
-## 工作原理
-
-1. 解析 YAML 配置文件
-2. 逐条调用 edge-tts 生成配音音频
-3. 根据音频时长计算每条字幕的起止时间
-4. 计算每张图片的总时长（关联字幕配音时长之和）
-5. 使用 FFmpeg 将图片转为视频片段，叠加字幕
-6. 合并所有视频片段（带淡入淡出转场）
-7. 合并所有配音音频，合成最终视频
-
-## 开发
+## 常用命令
 
 ```bash
-# 安装开发依赖
-pip install -e ".[dev]"
+# 查看支持的语音角色
+python -m img2vid voices
 
-# 运行测试
-pytest tests/ -v
+# 详细日志输出（排查问题）
+python -m img2vid generate project.yaml -v
 
-# 代码检查
-ruff check img2vid/
+# 指定输出路径
+python -m img2vid generate project.yaml -o /path/to/custom/dir
 ```
+
+## 为什么选择 ffmpeg 模式？
+
+早期的版本基于 MoviePy，但在处理长视频或多段转场时容易出现：
+1. **内存泄漏**：MoviePy 缓存机制导致大项目内存占用极高。
+2. **音画不同步**：随着片段增加，微小的帧差会导致结尾音频被截断。
+3. **性能瓶颈**：Python 层面的图像处理远慢于原生的 FFmpeg 滤镜链。
+
+现在的版本完全移除了 MoviePy，直接生成 FFmpeg 滤镜指令，在保证 100% 同步的同时，合成速度提升了 3-5 倍。
 
 ## License
 

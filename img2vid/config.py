@@ -34,20 +34,20 @@ class ImageConfig:
 @dataclass
 class SubtitleStyle:
     font: str = "Arial"
-    font_size: int = 48
+    font_size: int = 64
     font_color: str = "white"
     border_color: str = "black"
-    border_width: int = 2
+    border_width: int = 3
     position: str = "bottom"
-    margin_bottom: int = 60
+    margin_bottom: int = 200
 
 
 @dataclass
 class ProjectConfig:
     name: str = "output"
     fps: int = 30
-    width: int = 1920
-    height: int = 1080
+    width: int = 1080
+    height: int = 1920
     images: list[ImageConfig] = field(default_factory=list)
     subtitles: list[SubtitleConfig] = field(default_factory=list)
     style: SubtitleStyle = field(default_factory=SubtitleStyle)
@@ -104,19 +104,19 @@ def _parse_config(raw: dict) -> ProjectConfig:
 
     style = SubtitleStyle(
         font=style_raw.get("font", "Arial"),
-        font_size=style_raw.get("font_size", 48),
+        font_size=style_raw.get("font_size", 64),
         font_color=style_raw.get("font_color", "white"),
         border_color=style_raw.get("border_color", "black"),
-        border_width=style_raw.get("border_width", 2),
+        border_width=style_raw.get("border_width", 3),
         position=style_raw.get("position", "bottom"),
-        margin_bottom=style_raw.get("margin_bottom", 60),
+        margin_bottom=style_raw.get("margin_bottom", 200),
     )
 
     return ProjectConfig(
         name=project.get("name", "output"),
         fps=project.get("fps", 30),
-        width=project.get("width", 1920),
-        height=project.get("height", 1080),
+        width=project.get("width", 1080),
+        height=project.get("height", 1920),
         images=images,
         subtitles=subtitles,
         style=style,

@@ -26,9 +26,12 @@ async def generate_voice_async(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 先删除旧文件（如果存在）
+    if output_path.exists():
+        output_path.unlink()
+
     communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
 
-    duration = 0.0
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             with open(output_path, "ab") as f:

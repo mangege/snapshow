@@ -67,6 +67,17 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
 
     logger.info("开始生成视频...")
     work_dir = Path(tempfile.mkdtemp()) / "img2vid_work"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 将音频拷贝到工作目录
+    final_audio_dir = work_dir / "audio"
+    final_audio_dir.mkdir(parents=True, exist_ok=True)
+    for sub_id, (path, duration) in audio_info.items():
+        import shutil
+        new_path = final_audio_dir / path.name
+        shutil.copy2(path, new_path)
+        audio_info[sub_id] = (new_path, duration)
+
     output_path = generate_video(config, timeline, work_dir, base_dir)
 
     logger.info(f"视频生成成功: {output_path}")
