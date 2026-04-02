@@ -133,5 +133,13 @@ def voices():
     subprocess.run(["edge-tts", "--list-voices"])
 
 
+@main.command()
+def ui():
+    """启动 TUI 终端交互界面"""
+    from .tui import SubtitleTUI
+    app = SubtitleTUI()
+    app.run()
+
+
 if __name__ == "__main__":
     main()
