@@ -42,8 +42,11 @@ examples/output/
 *.png
 !examples/images/*.jpg
 !examples/images/*.png
+project_tui.yaml
 
-# Temp
+# Temp & Caches
 .tmp/
 tmp/
 *work/
+.pytest_cache/
+.ruff_cache/

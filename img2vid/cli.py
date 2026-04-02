@@ -58,8 +58,9 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
     
     # 生成标题语音
     if config.title:
-        from .voice import generate_voice_async
         import asyncio
+
+        from .voice import generate_voice_async
         title_audio_path = audio_dir / "__title__.mp3"
         duration = asyncio.run(generate_voice_async(
             text=config.title,
@@ -134,8 +135,13 @@ def voices():
 
 
 @main.command()
-def ui():
+@click.argument("path", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=".")
+def ui(path: str):
     """启动 TUI 终端交互界面"""
+    import os
+    abs_path = os.path.abspath(path)
+    os.chdir(abs_path)
+    
     from .tui import SubtitleTUI
     app = SubtitleTUI()
     app.run()

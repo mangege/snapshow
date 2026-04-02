@@ -1,11 +1,11 @@
 """测试配置解析模块"""
 
-import pytest
 from pathlib import Path
-import tempfile
+
+import pytest
 import yaml
 
-from img2vid.config import load_config, validate_config, ProjectConfig
+from img2vid.config import load_config, validate_config
 
 
 def create_temp_config(content: dict, tmp_path: Path) -> Path:

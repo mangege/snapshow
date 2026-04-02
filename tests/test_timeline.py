@@ -1,8 +1,7 @@
 """测试时间线计算模块"""
 
-import pytest
 from img2vid.config import ImageConfig, SubtitleConfig, VoiceConfig
-from img2vid.timeline import build_timeline, ImageSegment
+from img2vid.timeline import build_timeline
 
 
 class MockAudioInfo:

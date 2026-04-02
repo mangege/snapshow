@@ -1,30 +1,44 @@
 """视频合成模块 - 使用 ffmpeg 命令行实现"""
 
 import logging
-import os
 import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
+
 from .config import ProjectConfig, SubtitleStyle
-from .timeline import ImageSegment, SubtitleSegment
+from .timeline import ImageSegment
 
 logger = logging.getLogger(__name__)
 
+@lru_cache(maxsize=1)
 def _detect_gpu_encoder() -> str | None:
-    """检测可用的 GPU 硬件编码器"""
+    """检测并验证可用的 GPU 硬件编码器"""
     encoders = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"]
     try:
+        # 获取所有支持的编码器
         result = subprocess.run(
             ["ffmpeg", "-encoders"],
             capture_output=True,
             text=True,
         )
+        
         for enc in encoders:
             if enc in result.stdout:
-                logger.info(f"检测到 GPU 编码器: {enc}")
-                return enc
-    except FileNotFoundError:
+                # 进一步尝试：进行一个极短的测试编码以验证硬件是否真的可用
+                test_cmd = [
+                    "ffmpeg", "-y", "-f", "lavfi", "-i", "color=black:s=64x64",
+                    "-t", "0.1", "-c:v", enc, "-f", "null", "-"
+                ]
+                test_result = subprocess.run(test_cmd, capture_output=True)
+                if test_result.returncode == 0:
+                    logger.info(f"验证通过，使用 GPU 编码器: {enc}")
+                    return enc
+                else:
+                    logger.warning(f"检测到 {enc} 但验证失败（可能驱动不支持），将尝试下一个...")
+    except Exception:
         pass
+    logger.info("未发现可用 GPU 编码器，回退至 libx264")
     return None
 
 def _resolve_font_path(font_name: str) -> str:
@@ -150,8 +164,18 @@ def merge_videos_with_xfade(
     durations = []
     for p in video_paths:
         res = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(p)],
-            capture_output=True, text=True
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(p),
+            ],
+            capture_output=True,
+            text=True,
         )
         durations.append(float(res.stdout.strip()))
 
@@ -160,7 +184,7 @@ def merge_videos_with_xfade(
 
     filter_complex = ""
     current_offset = 0.0
-    
+
     inputs = []
     for i, p in enumerate(video_paths):
         inputs.extend(["-i", str(p)])
@@ -169,11 +193,14 @@ def merge_videos_with_xfade(
         prev_label = f"[v{i}]" if i > 0 else "[0:v]"
         next_label = f"[{i+1}:v]"
         out_label = f"[v{i+1}]"
-        
+
         # 每一个 xfade 的 offset 是前一个片段结束的时间减去转场时间
         current_offset += durations[i] - transition_duration
-        filter_complex += f"{prev_label}{next_label}xfade=transition=fade:duration={transition_duration}:offset={current_offset:.3f}"
-        
+        xfade_str = (
+            f"xfade=transition=fade:duration={transition_duration}:offset={current_offset:.3f}"
+        )
+        filter_complex += f"{prev_label}{next_label}{xfade_str}"
+
         if i < len(video_paths) - 2:
             filter_complex += f"{out_label};"
         else:
