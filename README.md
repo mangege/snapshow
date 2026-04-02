@@ -10,16 +10,24 @@
 - 图片间淡入淡出转场
 - 可配置字幕样式
 
+## 环境要求
+
+- Python 3.10+
+- FFmpeg（系统安装）
+
 ## 安装
+
+### 方式一：requirements.txt（推荐）
+
+```bash
+pip install -r requirements.txt
+```
+
+### 方式二：pip 安装
 
 ```bash
 pip install -e .
 ```
-
-依赖：
-- Python 3.10+
-- FFmpeg（系统安装）
-- edge-tts
 
 ## 快速开始
 
@@ -59,23 +67,35 @@ style:
 ### 2. 生成视频
 
 ```bash
-# 预览时间线
+# 方式一：使用 python -m
+python -m img2vid preview project.yaml
+python -m img2vid generate project.yaml
+
+# 方式二：使用 CLI 命令（pip install -e . 后）
 img2vid preview project.yaml
-
-# 生成视频
 img2vid generate project.yaml
-
-# 只看时间线，不生成
-img2vid generate project.yaml --dry-run
-
-# 指定输出目录
-img2vid generate project.yaml -o ./my_output
 ```
 
-### 3. 查看可用语音
+### 3. 常用命令
 
 ```bash
-img2vid voices
+# 预览时间线
+python -m img2vid preview project.yaml
+
+# 生成视频
+python -m img2vid generate project.yaml
+
+# 只看时间线，不生成
+python -m img2vid generate project.yaml --dry-run
+
+# 指定输出目录
+python -m img2vid generate project.yaml -o ./my_output
+
+# 详细日志
+python -m img2vid generate project.yaml -v
+
+# 查看可用语音
+python -m img2vid voices
 ```
 
 ## 配置说明
@@ -88,6 +108,7 @@ img2vid voices
 | width | 视频宽度 | 1920 |
 | height | 视频高度 | 1080 |
 | output_dir | 输出目录 | ./output |
+| transition_duration | 转场时长（秒） | 0.5 |
 
 ### 图片配置
 | 字段 | 说明 | 必填 |
@@ -102,9 +123,11 @@ img2vid voices
 | id | 字幕唯一标识 | 是 |
 | text | 字幕文本 | 是 |
 | image | 关联的图片 ID | 是 |
-| voice.voice | 语音角色 | 否 |
-| voice.rate | 语速调整 | 否 |
-| voice.pitch | 音调调整 | 否 |
+| voice.engine | 语音引擎 | edge-tts |
+| voice.voice | 语音角色 | zh-CN-XiaoxiaoNeural |
+| voice.rate | 语速调整（如 "+10%"） | +0% |
+| voice.pitch | 音调调整（如 "+10Hz"） | +0Hz |
+| voice.volume | 音量调整（如 "+10%"） | +0% |
 
 ### 字幕样式
 | 字段 | 说明 | 默认值 |
@@ -123,6 +146,7 @@ img2vid voices
 img2vid/
 ├── img2vid/
 │   ├── __init__.py
+│   ├── __main__.py     # python -m 入口
 │   ├── cli.py          # 命令行入口
 │   ├── config.py       # 配置解析
 │   ├── voice.py        # 配音生成
@@ -131,7 +155,9 @@ img2vid/
 ├── examples/
 │   └── demo.yaml       # 示例配置
 ├── tests/
-└── pyproject.toml
+├── requirements.txt
+├── pyproject.toml
+└── README.md
 ```
 
 ## 工作原理
@@ -143,6 +169,19 @@ img2vid/
 5. 使用 FFmpeg 将图片转为视频片段，叠加字幕
 6. 合并所有视频片段（带淡入淡出转场）
 7. 合并所有配音音频，合成最终视频
+
+## 开发
+
+```bash
+# 安装开发依赖
+pip install -e ".[dev]"
+
+# 运行测试
+pytest tests/ -v
+
+# 代码检查
+ruff check img2vid/
+```
 
 ## License
 
