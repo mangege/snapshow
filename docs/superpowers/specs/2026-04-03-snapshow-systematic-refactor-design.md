@@ -113,9 +113,19 @@
 
 **改动：**
 
-1. **segment.end 突变修复**（video.py:361-374）
-   - 当前：临时修改 `segment.end` 然后恢复（ImageSegment 是 dataclass，使用属性访问）
-   - 改为：在循环内创建局部变量 `adjusted_end = segment.end - transition_duration`，不修改原始数据
+1. **segment.end 突变修复**（video.py:359-374）
+   - 当前：临时修改 `segment.end`（`segment.end += config.transition_duration`）然后恢复
+   - 问题：`create_image_segment_video()` 通过 `segment.end - segment.start` 计算时长（video.py:146），转场需要 clip 比自然时长多 `transition_duration`
+   - 改为：使用 `dataclasses.replace()` 创建新对象，不修改原始 segment：
+     ```python
+     from dataclasses import replace
+     if i < len(timeline) - 1:
+         adjusted_segment = replace(segment, end=segment.end + config.transition_duration)
+     else:
+         adjusted_segment = segment
+     create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir)
+     ```
+   - 注意：是 `+` 不是 `-`，因为每个 clip 需要延长以容纳 xfade 重叠
 
 2. **FFmpeg 错误处理增强**
    - 当前：`subprocess.run(..., check=True, capture_output=True)` 错误时 stderr 被丢弃
@@ -197,6 +207,20 @@
 **HelpScreen 同步更新：**
 - `HelpScreen.compose()`（tui.py:54-78）中的帮助文本硬编码了旧快捷键
 - 必须同步更新：`F3→Ctrl+R`、`F2→Ctrl+E`、`F5→Ctrl+P`、`F6→Ctrl+I`、新增 `Ctrl+Z` 撤销
+
+**BINDINGS 列表更新：**
+- `tui.py:559-571` 的 `BINDINGS` 列表必须同步更新：
+  - `("f3", "preview_config", "预览配置")` → `("ctrl+r", "preview_config", "预览配置")`
+  - `("f2", "focus_editor", "聚焦编辑器")` → `("ctrl+e", "focus_editor", "聚焦编辑器")`
+  - `("f5", "focus_preview", "聚焦预览")` → `("ctrl+p", "focus_preview", "聚焦预览")`
+  - `("f6", "focus_sidebar", "聚焦文件树")` → `("ctrl+i", "focus_sidebar", "聚焦文件树")`
+  - 新增 `("ctrl+z", "undo", "撤销")`
+
+**on_mount border title 更新：**
+- `tui.py:583-586` 的 border title 仍引用旧 F 键：
+  - `f"图片列表 ({Path.cwd().name}) [F6]"` → `f"图片列表 ({Path.cwd().name}) [Ctrl+I]"`
+  - `"内容编辑 (F2)"` → `"内容编辑 (Ctrl+E)"`
+  - `"分段预览 (F5)"` → `"分段预览 (Ctrl+P)"`
 
 **Footer 分组显示实现方案：**
 - Textual 的 `Footer` 默认扁平渲染 `BINDINGS` 列表
