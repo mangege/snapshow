@@ -1,0 +1,60 @@
+project:
+  name: "demo_video"
+  fps: 30
+  width: 1920
+  height: 1080
+  output_dir: "./output"
+
+images:
+  - id: img1
+    path: "images/scene1.jpg"
+  - id: img2
+    path: "images/scene2.jpg"
+  - id: img3
+    path: "images/scene3.jpg"
+
+subtitles:
+  - id: sub1
+    text: "欢迎来到我的世界，今天带大家看一些美丽的风景"
+    image: img1
+    voice:
+      engine: edge-tts
+      voice: zh-CN-XiaoxiaoNeural
+      rate: "+0%"
+
+  - id: sub2
+    text: "这是第一站，我们来到了一片宁静的湖边"
+    image: img1
+    voice:
+      engine: edge-tts
+      voice: zh-CN-XiaoxiaoNeural
+
+  - id: sub3
+    text: "湖水清澈见底，倒映着蓝天白云"
+    image: img2
+    voice:
+      engine: edge-tts
+      voice: zh-CN-YunxiNeural
+
+  - id: sub4
+    text: "远处的山峦连绵起伏，美不胜收"
+    image: img2
+    voice:
+      engine: edge-tts
+      voice: zh-CN-YunxiNeural
+
+  - id: sub5
+    text: "感谢大家的观看，我们下期再见"
+    image: img3
+    voice:
+      engine: edge-tts
+      voice: zh-CN-XiaoxiaoNeural
+
+style:
+  font: "Arial"
+  font_size: 48
+  font_color: "white"
+  border_color: "black"
+  border_width: 2
+  position: "bottom"
+  margin_bottom: 60
