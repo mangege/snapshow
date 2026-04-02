@@ -31,7 +31,27 @@ pip install -e .
 
 ## 快速开始
 
-### 1. 创建配置文件
+### 运行示例（推荐新手）
+
+仓库自带示例图片和配置，下载即可运行：
+
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 运行示例（在 examples 目录下）
+cd examples
+bash run_example.sh
+
+# 或者手动运行
+cd examples
+python -m img2vid preview demo.yaml
+python -m img2vid generate demo.yaml -o ./output
+```
+
+示例输出视频：`examples/output/demo_video.mp4`
+
+### 创建自己的项目
 
 ```yaml
 project:
