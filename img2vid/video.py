@@ -62,51 +62,68 @@ def create_image_segment_video(
     duration = segment.end - segment.start
     fps = config.fps
     
-    image_path = Path(segment.image_path)
-    if not image_path.is_absolute():
-        image_path = base_dir / image_path
+    # 基础输入处理
+    if segment.image_path == "__black__":
+        input_args = ["-f", "lavfi", "-i", f"color=black:s={config.width}x{config.height}:r={fps}"]
+    else:
+        image_path = Path(segment.image_path)
+        if not image_path.is_absolute():
+            image_path = base_dir / image_path
+        input_args = ["-framerate", str(fps), "-loop", "1", "-i", str(image_path)]
 
     font_path = _resolve_font_path(style.font)
     gpu_encoder = _detect_gpu_encoder()
     codec = gpu_encoder if gpu_encoder else "libx264"
 
-    # 滤镜链：缩放并填充到目标分辨率，确保格式为 yuv420p
-    filters = [
-        f"scale={config.width}:{config.height}:force_original_aspect_ratio=decrease",
-        f"pad={config.width}:{config.height}:(ow-iw)/2:(oh-ih)/2:color=black",
-        "format=yuv420p"
-    ]
+    # 滤镜链
+    filters = []
+    if segment.image_path != "__black__":
+        filters.extend([
+            f"scale={config.width}:{config.height}:force_original_aspect_ratio=decrease",
+            f"pad={config.width}:{config.height}:(ow-iw)/2:(oh-ih)/2:color=black"
+        ])
+    filters.append("format=yuv420p")
 
-    for sub in segment.subtitles:
-        start = max(0, sub.start - segment.start)
-        end = sub.end - segment.start
-        text = _escape_text(sub.text)
-        
-        # 字幕位置
-        if style.position == "bottom":
-            y = f"h-{style.margin_bottom}-th"
-        elif style.position == "top":
-            y = f"{style.margin_bottom}"
-        else:
-            y = "(h-th)/2"
+    escaped_font_path = font_path.replace(":", "\\:")
 
-        # 字体路径在 drawtext 中需要对冒号进行转义（Windows/Linux 兼容）
-        escaped_font_path = font_path.replace(":", "\\:")
-        
+    # 特殊处理标题和 Logo
+    if segment.image_id == "__title__" or segment.image_id == "__logo__":
+        # 在黑底正中央渲染大字
+        text = _escape_text(config.title if segment.image_id == "__title__" else config.logo)
         drawtext = (
             f"drawtext=fontfile='{escaped_font_path}':text='{text}':"
-            f"fontsize={style.font_size}:fontcolor={style.font_color}:"
-            f"borderw={style.border_width}:bordercolor={style.border_color}:"
-            f"x=(w-tw)/2:y={y}:enable='between(t,{start},{end})'"
+            f"fontsize={style.font_size * 1.5}:fontcolor=white:"
+            f"x=(w-tw)/2:y=(h-th)/2"
         )
         filters.append(drawtext)
+    else:
+        # 普通字幕渲染
+        for sub in segment.subtitles:
+            start = max(0, sub.start - segment.start)
+            end = sub.end - segment.start
+            text = _escape_text(sub.text)
+            
+            # 字幕位置
+            if style.position == "bottom":
+                y = f"h-{style.margin_bottom}-th"
+            elif style.position == "top":
+                y = f"{style.margin_bottom}"
+            else:
+                y = "(h-th)/2"
+
+            drawtext = (
+                f"drawtext=fontfile='{escaped_font_path}':text='{text}':"
+                f"fontsize={style.font_size}:fontcolor={style.font_color}:"
+                f"borderw={style.border_width}:bordercolor={style.border_color}:"
+                f"x=(w-tw)/2:y={y}:enable='between(t,{start},{end})'"
+            )
+            filters.append(drawtext)
 
     filter_str = ",".join(filters)
 
     cmd = [
-        "ffmpeg", "-y",
-        "-framerate", str(fps),
-        "-loop", "1", "-i", str(image_path),
+        "ffmpeg", "-y"
+    ] + input_args + [
         "-t", f"{duration:.3f}",
         "-vf", filter_str,
         "-c:v", codec,

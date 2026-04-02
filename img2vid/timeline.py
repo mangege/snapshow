@@ -27,18 +27,11 @@ def build_timeline(
     subtitles: list,
     audio_info: dict[str, tuple],
     transition_duration: float = 0.5,
+    title: str = "",
+    logo: str = "",
 ) -> list[ImageSegment]:
     """
     构建完整时间线
-    
-    Args:
-        images: ImageConfig 列表
-        subtitles: SubtitleConfig 列表
-        audio_info: {subtitle_id: (audio_path, duration)}
-        transition_duration: 转场时长
-        
-    Returns:
-        ImageSegment 列表
     """
     subtitles_by_image: dict[str, list] = {}
     for sub in subtitles:
@@ -49,6 +42,28 @@ def build_timeline(
     timeline: list[ImageSegment] = []
     current_time = 0.0
 
+    # 1. 插入标题片段 (黑底白字，只听声音)
+    if title and "__title__" in audio_info:
+        audio_path, duration = audio_info["__title__"]
+        sub_segment = SubtitleSegment(
+            id="__title__",
+            text=title,
+            start=current_time,
+            end=current_time + duration,
+            audio_path=str(audio_path),
+        )
+        segment = ImageSegment(
+            image_id="__title__",
+            image_path="__black__",
+            start=current_time,
+            end=current_time + duration,
+            subtitles=[sub_segment],
+            audio_paths=[str(audio_path)],
+        )
+        timeline.append(segment)
+        current_time += duration
+
+    # 2. 插入正文图片
     for img in images:
         subs = subtitles_by_image.get(img.id, [])
         if not subs:
@@ -95,6 +110,19 @@ def build_timeline(
         )
         timeline.append(segment)
         current_time += image_duration
+
+    # 3. 插入 Logo 片段 (黑底白字，1s，无声)
+    if logo:
+        segment = ImageSegment(
+            image_id="__logo__",
+            image_path="__black__",
+            start=current_time,
+            end=current_time + 1.0,
+            subtitles=[],
+            audio_paths=[],
+        )
+        timeline.append(segment)
+        current_time += 1.0
 
     return timeline
 

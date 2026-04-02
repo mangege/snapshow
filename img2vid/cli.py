@@ -55,10 +55,30 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
     logger.info("生成配音...")
     audio_dir = Path(tempfile.mkdtemp()) / "audio"
     audio_info = generate_voices(config.subtitles, audio_dir)
+    
+    # 生成标题语音
+    if config.title:
+        from .voice import generate_voice_async
+        import asyncio
+        title_audio_path = audio_dir / "__title__.mp3"
+        duration = asyncio.run(generate_voice_async(
+            text=config.title,
+            output_path=title_audio_path,
+            voice="zh-CN-XiaoxiaoNeural"
+        ))
+        audio_info["__title__"] = (title_audio_path, duration)
+        
     logger.info(f"配音生成完成，共 {len(audio_info)} 条")
 
     logger.info("计算时间线...")
-    timeline = build_timeline(config.images, config.subtitles, audio_info, config.transition_duration)
+    timeline = build_timeline(
+        config.images, 
+        config.subtitles, 
+        audio_info, 
+        config.transition_duration,
+        title=config.title,
+        logo=config.logo
+    )
     print_timeline(timeline)
 
     if dry_run:

@@ -1,8 +1,10 @@
 project:
   name: "demo_video"
+  title: "探索美丽的自然风光"
+  logo: "关注获取更多美景"
   fps: 30
-  width: 1920
-  height: 1080
+  width: 1080
+  height: 1920
   output_dir: "./output"
 
 images:
@@ -52,9 +54,9 @@ subtitles:
 
 style:
   font: "Noto Sans CJK SC"
-  font_size: 48
+  font_size: 64
   font_color: "white"
   border_color: "black"
-  border_width: 2
+  border_width: 3
   position: "bottom"
-  margin_bottom: 60
+  margin_bottom: 200

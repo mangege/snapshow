@@ -22,6 +22,7 @@ class SubtitleConfig:
     text: str
     image: str
     voice: VoiceConfig = field(default_factory=VoiceConfig)
+    render: bool = True  # 是否在画面上渲染文字
 
 
 @dataclass
@@ -53,6 +54,8 @@ class ProjectConfig:
     style: SubtitleStyle = field(default_factory=SubtitleStyle)
     transition_duration: float = 0.5
     output_dir: str = "./output"
+    title: str = ""  # 视频开头的标题
+    logo: str = ""   # 视频结尾的 Logo 文字
 
 
 def load_config(config_path: str | Path) -> ProjectConfig:
@@ -122,6 +125,8 @@ def _parse_config(raw: dict) -> ProjectConfig:
         style=style,
         transition_duration=project.get("transition_duration", 0.5),
         output_dir=project.get("output_dir", "./output"),
+        title=project.get("title", ""),
+        logo=project.get("logo", ""),
     )
 
 
