@@ -51,7 +51,7 @@ subtitles:
       voice: zh-CN-XiaoxiaoNeural
 
 style:
-  font: "Arial"
+  font: "Noto Sans CJK SC"
   font_size: 48
   font_color: "white"
   border_color: "black"

@@ -67,7 +67,7 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
 
     logger.info("开始生成视频...")
     work_dir = Path(tempfile.mkdtemp()) / "img2vid_work"
-    output_path = generate_video(config, timeline, work_dir)
+    output_path = generate_video(config, timeline, work_dir, base_dir)
 
     logger.info(f"视频生成成功: {output_path}")
 

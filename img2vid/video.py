@@ -1,11 +1,19 @@
-"""视频合成模块 - 使用 FFmpeg 合成最终视频"""
+"""视频合成模块 - 使用 MoviePy 合成最终视频"""
 
 import logging
 import subprocess
-import tempfile
 from pathlib import Path
 
-from PIL import Image
+from moviepy import (
+    AudioFileClip,
+    CompositeVideoClip,
+    ImageClip,
+    TextClip,
+    VideoFileClip,
+    concatenate_audioclips,
+    concatenate_videoclips,
+    vfx,
+)
 
 from .config import ProjectConfig, SubtitleStyle
 from .timeline import ImageSegment, SubtitleSegment
@@ -13,127 +21,104 @@ from .timeline import ImageSegment, SubtitleSegment
 logger = logging.getLogger(__name__)
 
 
-def _get_image_dimensions(image_path: Path) -> tuple[int, int]:
-    with Image.open(image_path) as img:
-        return img.size
+def _resolve_font_path(font_name: str) -> str:
+    """将字体名称解析为字体文件路径"""
+    if Path(font_name).is_file():
+        return font_name
+    try:
+        result = subprocess.run(
+            ["fc-match", "-f", "%{file}", font_name],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return font_name
 
 
-def _scale_image_to_fit(image_path: Path, width: int, height: int) -> Path:
-    """缩放图片以适配目标分辨率，保持比例"""
-    img = Image.open(image_path)
-    img_ratio = img.width / img.height
-    target_ratio = width / height
-
-    if img_ratio > target_ratio:
-        new_width = int(height * img_ratio)
-        new_height = height
-    else:
-        new_width = width
-        new_height = int(width / img_ratio)
-
-    output = Path(tempfile.mkdtemp()) / f"scaled_{image_path.name}"
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    img_resized = img.resize((new_width, new_height), Image.LANCZOS)
-    img_resized.save(output)
-    return output
-
-
-def _escape_subtitle_text(text: str) -> str:
-    """转义 FFmpeg drawtext 特殊字符"""
-    text = text.replace("'", r"'\''")
-    text = text.replace(":", r"\:")
-    text = text.replace(",", r"\,")
-    text = text.replace("[", r"\[")
-    text = text.replace("]", r"\]")
-    text = text.replace("%", r"\%")
-    return text
-
-
-def _build_subtitle_filter(
+def _create_subtitle_clip(
     sub: SubtitleSegment,
     style: SubtitleStyle,
     video_width: int,
     video_height: int,
     global_offset: float = 0.0,
-) -> str:
-    """构建单条字幕的 drawtext 滤镜"""
-    escaped_text = _escape_subtitle_text(sub.text)
-
+) -> TextClip:
+    """创建单条字幕的 TextClip"""
     start = sub.start - global_offset
     end = sub.end - global_offset
+    duration = end - start
+
+    font_path = _resolve_font_path(style.font)
+
+    text_clip = TextClip(
+        text=sub.text,
+        font=font_path,
+        font_size=style.font_size,
+        color=style.font_color,
+        stroke_color=style.border_color,
+        stroke_width=style.border_width,
+        transparent=True,
+        duration=duration,
+    ).with_start(start)
 
     if style.position == "bottom":
-        y = f"h - {style.margin_bottom} - th"
+        y = video_height - style.margin_bottom - text_clip.size[1]
     elif style.position == "top":
         y = style.margin_bottom
     else:
-        y = "(h - th) / 2"
+        y = (video_height - text_clip.size[1]) / 2
 
-    return (
-        f"drawtext="
-        f"text='{escaped_text}':"
-        f"fontfile={style.font}:"
-        f"fontsize={style.font_size}:"
-        f"fontcolor={style.font_color}:"
-        f"borderw={style.border_width}:"
-        f"bordercolor={style.border_color}:"
-        f"x=(w - tw) / 2:"
-        f"y={y}:"
-        f"enable='between(t\\,{start}\\,{end})'"
-    )
+    return text_clip.with_position(("center", y))
+
+    if style.position == "bottom":
+        y = video_height - style.margin_bottom - text_clip.size[1]
+    elif style.position == "top":
+        y = style.margin_bottom
+    else:
+        y = (video_height - text_clip.size[1]) / 2
+
+    return text_clip.with_position(("center", y))
 
 
 def create_image_video(
     segment: ImageSegment,
     config: ProjectConfig,
     output_path: Path,
+    base_dir: Path,
 ) -> None:
     """为单个图片片段创建视频（含字幕）"""
     duration = segment.end - segment.start
 
     image_path = Path(segment.image_path)
     if not image_path.is_absolute():
-        image_path = Path.cwd() / image_path
+        image_path = base_dir / image_path
 
-    scaled_path = _scale_image_to_fit(image_path, config.width, config.height)
+    clip = ImageClip(str(image_path)).with_duration(duration)
 
-    subtitle_filters = []
+    clip = clip.with_effects([vfx.Resize((config.width, config.height))])
+
+    clips_to_composite = [clip]
+
     for sub in segment.subtitles:
-        filter_str = _build_subtitle_filter(
+        sub_clip = _create_subtitle_clip(
             sub, config.style, config.width, config.height, segment.start
         )
-        subtitle_filters.append(filter_str)
+        clips_to_composite.append(sub_clip)
 
-    vf_parts = []
-    vf_parts.append(
-        f"scale={config.width}:{config.height}:force_original_aspect_ratio=decrease,"
-        f"pad={config.width}:{config.height}:(ow-iw)/2:(oh-ih)/2:black"
-    )
-    if subtitle_filters:
-        vf_parts.extend(subtitle_filters)
+    if len(clips_to_composite) > 1:
+        final_clip = CompositeVideoClip(clips_to_composite, size=(config.width, config.height))
+    else:
+        final_clip = clip
 
-    vf = ",".join(vf_parts)
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-loop", "1",
-        "-i", str(scaled_path),
-        "-f", "lavfi",
-        "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-        "-t", str(duration),
-        "-vf", vf,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-shortest",
+    final_clip.write_videofile(
         str(output_path),
-    ]
-
-    logger.debug(f"运行命令: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, capture_output=True)
+        fps=config.fps,
+        codec="libx264",
+        preset="fast",
+        audio=False,
+        logger=None,
+    )
     logger.info(f"创建视频片段: {output_path.name} ({duration:.2f}s)")
 
 
@@ -141,6 +126,7 @@ def merge_videos(
     video_paths: list[Path],
     output_path: Path,
     transition_duration: float = 0.5,
+    fps: int = 30,
 ) -> None:
     """合并多个视频片段，添加转场效果"""
     if len(video_paths) == 1:
@@ -148,71 +134,33 @@ def merge_videos(
         shutil.copy2(video_paths[0], output_path)
         return
 
-    inputs = []
-    for vp in video_paths:
-        inputs.extend(["-i", str(vp)])
+    clips = [VideoFileClip(str(p)) for p in video_paths]
 
-    n = len(video_paths)
-    xfade_offset = 0.0
+    clips_with_transition = []
+    for i, clip in enumerate(clips):
+        if i > 0:
+            clip = clip.with_effects([vfx.CrossFadeIn(transition_duration)])
+        if i < len(clips) - 1:
+            clip = clip.with_effects([vfx.CrossFadeOut(transition_duration)])
+        clips_with_transition.append(clip)
 
-    first_seg_duration_cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(video_paths[0]),
-    ]
-    result = subprocess.run(first_seg_duration_cmd, capture_output=True, text=True, check=True)
+    final_clip = concatenate_videoclips(
+        clips_with_transition,
+        method="compose",
+        padding=-transition_duration,
+    )
 
-    filter_parts = []
-    current_input = 0
-
-    for i in range(1, n):
-        prev_label = f"v{current_input}" if current_input > 0 else "[0:v]"
-        curr_input = f"[{i}:v]"
-        out_label = f"v{current_input + 1}" if i < n - 1 else "vout"
-
-        filter_parts.append(
-            f"{prev_label}{curr_input}"
-            f"xfade=transition=fade:duration={transition_duration}:offset={xfade_offset}"
-            f"{out_label}"
-        )
-
-        seg_duration_cmd = [
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            str(video_paths[i]),
-        ]
-        result = subprocess.run(seg_duration_cmd, capture_output=True, text=True, check=True)
-        seg_duration = float(result.stdout.strip())
-
-        xfade_offset += seg_duration - transition_duration
-        current_input += 1
-
-    audio_parts = []
-    for i in range(n):
-        audio_parts.append(f"[{i}:a]")
-    audio_parts.append(f"concat=n={n}:v=0:a=1[aout]")
-    audio_filter = "".join(audio_parts)
-
-    full_filter = ";".join(filter_parts) + ";" + audio_filter
-
-    cmd = [
-        "ffmpeg", "-y",
-        *inputs,
-        "-filter_complex", full_filter,
-        "-map", "vout",
-        "-map", "[aout]",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "192k",
+    final_clip.write_videofile(
         str(output_path),
-    ]
+        fps=fps,
+        codec="libx264",
+        preset="fast",
+        logger=None,
+    )
 
-    logger.debug(f"运行命令: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, capture_output=True)
+    for clip in clips:
+        clip.close()
+
     logger.info(f"合并视频完成: {output_path}")
 
 
@@ -222,25 +170,24 @@ def add_audio_to_video(
     output_path: Path,
 ) -> None:
     """将音频轨道替换到视频中"""
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-i", str(audio_path),
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-shortest",
-        str(output_path),
-    ]
+    video = VideoFileClip(str(video_path))
+    audio = AudioFileClip(str(audio_path))
 
-    logger.debug(f"运行命令: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, capture_output=True)
+    final_clip = video.with_audio(audio)
+    final_clip.write_videofile(
+        str(output_path),
+        codec="libx264",
+        audio_codec="aac",
+        preset="fast",
+        logger=None,
+    )
+
+    video.close()
+    audio.close()
     logger.info(f"添加音频完成: {output_path}")
 
 
-def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir: Path) -> Path:
+def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir: Path, base_dir: Path) -> Path:
     """
     主函数：根据配置和时间线生成最终视频
     
@@ -258,21 +205,20 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
 
     for i, segment in enumerate(timeline):
         clip_path = clips_dir / f"clip_{i:03d}.mp4"
-        create_image_video(segment, config, clip_path)
+        create_image_video(segment, config, clip_path, base_dir)
         video_paths.append(clip_path)
         all_audio_paths.extend(segment.audio_paths)
 
     if all_audio_paths:
         merged_audio = audio_dir / "merged_audio.aac"
-        inputs = " ".join([f"-i '{p}'" for p in all_audio_paths])
-        concat_parts = "".join([f"[{i}:a]" for i in range(len(all_audio_paths))])
-        filter_complex = f"{concat_parts}concat=n={len(all_audio_paths)}:v=0:a=1[outa]"
-
-        cmd = f"ffmpeg -y {inputs} -filter_complex '{filter_complex}' -map '[outa]' -c:a aac -b:a 192k '{merged_audio}'"
-        subprocess.run(cmd, shell=True, check=True, capture_output=True)
+        audio_clips = [AudioFileClip(str(p)) for p in all_audio_paths]
+        merged_audio_clip = concatenate_audioclips(audio_clips)
+        merged_audio_clip.write_audiofile(str(merged_audio), codec="aac", logger=None)
+        for ac in audio_clips:
+            ac.close()
 
         video_with_subtitles = work_dir / "video_with_subtitles.mp4"
-        merge_videos(video_paths, video_with_subtitles, config.transition_duration)
+        merge_videos(video_paths, video_with_subtitles, config.transition_duration, config.fps)
 
         output_path = work_dir / f"{config.name}.mp4"
         add_audio_to_video(video_with_subtitles, merged_audio, output_path)
