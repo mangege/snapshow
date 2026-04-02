@@ -4,6 +4,8 @@ import os
 import platform
 import shutil
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -181,3 +183,13 @@ def _font_exists(font_name: str, system: str) -> bool:
         pass
 
     return False
+
+
+@contextmanager
+def temp_work_dir(prefix: str = "snapshow"):
+    """上下文管理器，确保临时工作目录在退出时被清理"""
+    tmp = tempfile.mkdtemp(prefix=f"{prefix}_")
+    try:
+        yield Path(tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
