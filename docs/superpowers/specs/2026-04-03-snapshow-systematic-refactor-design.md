@@ -51,7 +51,22 @@
 ### utils.py
 
 **改动：**
-- 无代码改动（当前逻辑正确）
+- 新增 `temp_work_dir()` 上下文管理器（供第3层使用）：
+  ```python
+  from contextlib import contextmanager
+  import tempfile
+  import shutil
+
+  @contextmanager
+  def temp_work_dir(prefix: str = "snapshow"):
+      """上下文管理器，确保临时工作目录在退出时被清理"""
+      tmp = tempfile.mkdtemp(prefix=f"{prefix}_")
+      try:
+          yield Path(tmp)
+      finally:
+          shutil.rmtree(tmp, ignore_errors=True)
+  ```
+- 其余无代码改动（当前逻辑正确）
 
 **测试：**
 - `test_find_ffmpeg`：mock 各平台路径
@@ -214,7 +229,16 @@
   - `("f2", "focus_editor", "聚焦编辑器")` → `("ctrl+e", "focus_editor", "聚焦编辑器")`
   - `("f5", "focus_preview", "聚焦预览")` → `("ctrl+p", "focus_preview", "聚焦预览")`
   - `("f6", "focus_sidebar", "聚焦文件树")` → `("ctrl+i", "focus_sidebar", "聚焦文件树")`
-  - 新增 `("ctrl+z", "undo", "撤销")`
+   - 新增 `("ctrl+z", "undo", "撤销")`
+
+**新增 `action_undo()` 方法：**
+- BINDINGS 中的 `"undo"` action 需要对应方法实现
+- 当焦点不在 TextArea 时，Textual 无法自动调用 TextArea.undo()
+- 添加：
+  ```python
+  def action_undo(self):
+      self.text_area.undo()
+  ```
 
 **on_mount border title 更新：**
 - `tui.py:583-586` 的 border title 仍引用旧 F 键：
