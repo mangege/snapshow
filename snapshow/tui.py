@@ -330,6 +330,11 @@ class UserConfigEdit(ModalScreen):
                         id="uc_resolution_select",
                         compact=True,
                     )
+                with Horizontal(classes="uc_row"):
+                    yield Label("每屏字数:")
+                    yield Input(
+                        value=str(project.get("max_chars", 10)), id="uc_max_chars_input", type="integer", compact=True
+                    )
 
                 yield Static("默认声音设置", classes="uc_section_title")
                 with Horizontal(classes="uc_row"):
@@ -376,6 +381,7 @@ class UserConfigEdit(ModalScreen):
                 "powered_by": self.query_one("#uc_powered_by", Select).value,
                 "fps": int(self.query_one("#uc_fps_input", Input).value or 30),
                 "resolution": resolution,
+                "max_chars": int(self.query_one("#uc_max_chars_input", Input).value or 10),
             },
             "voice": {
                 "engine": "edge-tts",
@@ -683,7 +689,7 @@ class SubtitleTUI(App):
         super().__init__()
         self.image_data = {}
         self.current_image = None
-        self.max_chars = 15
+        self.max_chars = 10
 
     def on_mount(self) -> None:
         self.theme = "textual-light"
@@ -710,6 +716,10 @@ class SubtitleTUI(App):
         self.query_one("#project_account_id_input", Input).value = project.get("account_id", "")
         self.query_one("#project_resolution_select", Select).value = project.get("resolution", "1080x1920")
         self.query_one("#project_voice_select", Select).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
+        self.max_chars = project.get("max_chars", 10)
+        self.query_one("#char_limit", Input).value = str(self.max_chars)
+        self.max_chars = project.get("max_chars", 10)
+        self.query_one("#char_limit", Input).value = str(self.max_chars)
 
     def handle_load_decision(self, should_load: bool):
         if should_load:
@@ -749,6 +759,10 @@ class SubtitleTUI(App):
             self.query_one("#project_account_name_input", Input).value = account_name
             self.query_one("#project_account_id_input", Input).value = account_id
             self.query_one("#project_resolution_select", Select).value = resolution
+            self.max_chars = project.get("max_chars", uc_project.get("max_chars", 10))
+            self.query_one("#char_limit", Input).value = str(self.max_chars)
+            self.max_chars = project.get("max_chars", uc_project.get("max_chars", 10))
+            self.query_one("#char_limit", Input).value = str(self.max_chars)
 
             subtitles = config.get("subtitles", [])
             if subtitles and "voice" in subtitles[0]:
@@ -955,6 +969,7 @@ class SubtitleTUI(App):
                 "title": title,
                 "account_name": account_name,
                 "account_id": account_id,
+                "max_chars": self.max_chars,
             },
             "images": [],
             "subtitles": [],

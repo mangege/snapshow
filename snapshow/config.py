@@ -59,6 +59,8 @@ class ProjectConfig:
     account_name: str = ""  # 用户名，结尾显示
     account_id: str = ""  # 账号ID，结尾显示时加 @
     powered_by: bool = True  # 是否在结尾显示 "Powered by snapshow"
+    max_chars: int = 10  # 每屏字数
+    max_chars: int = 10  # 每屏字数
 
 
 def load_config(config_path: str | Path, use_user_config_fallback: bool = True) -> ProjectConfig:
@@ -143,6 +145,7 @@ def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
         account_name=project.get("account_name", uc_project.get("account_name", "")),
         account_id=project.get("account_id", uc_project.get("account_id", "")),
         powered_by=project.get("powered_by", uc_project.get("powered_by", True)),
+        max_chars=project.get("max_chars", uc_project.get("max_chars", 10)),
     )
 
 

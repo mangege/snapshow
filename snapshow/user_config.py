@@ -19,6 +19,7 @@ DEFAULT_USER_CONFIG = {
         "fps": 30,
         "resolution": "1080x1920",
         "output_dir": "./output",
+        "max_chars": 10,
     },
     "voice": {
         "engine": "edge-tts",

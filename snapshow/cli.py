@@ -100,6 +100,7 @@ def preview(config_path: str):
     print(f"项目名称: {config.name}")
     print(f"分辨率: {config.width}x{config.height}")
     print(f"帧率: {config.fps}")
+    print(f"每屏字数: {config.max_chars}")
     print(f"图片: {len(config.images)} 张")
     print(f"字幕: {len(config.subtitles)} 条")
 
@@ -165,6 +166,7 @@ def config_show():
     print(f"  片尾署名:   {project.get('powered_by', True)}")
     print(f"  FPS:        {project.get('fps', 30)}")
     print(f"  分辨率:     {project.get('resolution', '1080x1920')}")
+    print(f"  每屏字数:   {project.get('max_chars', 10)}")
     print(f"  输出目录:   {project.get('output_dir', './output')}")
     print("\n[声音默认]")
     print(f"  声音:       {voice.get('voice', 'zh-CN-XiaoxiaoNeural')}")
@@ -187,6 +189,7 @@ def config_show():
 @click.option("--rate", help="默认语速 (如 +10%)")
 @click.option("--volume", help="默认音量 (如 +10%)")
 @click.option("--pitch", help="默认音调 (如 +10Hz)")
+@click.option("--max-chars", type=int, help="默认每屏字数")
 def config_set(**kwargs):
     """设置用户级配置项"""
     uc = load_user_config()
@@ -206,6 +209,12 @@ def config_set(**kwargs):
         changed = True
     if kwargs.get("resolution") is not None:
         uc.setdefault("project", {})["resolution"] = kwargs["resolution"]
+        changed = True
+    if kwargs.get("max_chars") is not None:
+        uc.setdefault("project", {})["max_chars"] = kwargs["max_chars"]
+        changed = True
+    if kwargs.get("max_chars") is not None:
+        uc.setdefault("project", {})["max_chars"] = kwargs["max_chars"]
         changed = True
     if kwargs.get("voice") is not None:
         uc.setdefault("voice", {})["voice"] = kwargs["voice"]
