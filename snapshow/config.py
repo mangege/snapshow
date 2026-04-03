@@ -24,7 +24,6 @@ class SubtitleConfig:
     text: str
     image: str
     voice: VoiceConfig = field(default_factory=VoiceConfig)
-    render: bool = True  # 是否在画面上渲染文字
 
 
 @dataclass

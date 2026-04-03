@@ -121,3 +121,36 @@ class TestValidateConfig:
 
         with pytest.raises(ValueError, match="至少需要一条字幕"):
             validate_config(config)
+
+
+class TestConfigEdgeCases:
+    def test_config_missing_project_key(self, tmp_path):
+        config_data = {
+            "images": [{"id": "img1", "path": "test.jpg"}],
+            "subtitles": [{"id": "sub1", "text": "hello", "image": "img1"}],
+        }
+        config_file = create_temp_config(config_data, tmp_path)
+        config = load_config(config_file)
+        assert config.name == "output"
+
+    def test_config_missing_images_key(self, tmp_path):
+        config_data = {
+            "project": {"name": "test"},
+            "subtitles": [{"id": "sub1", "text": "hello", "image": "img1"}],
+        }
+        config_file = create_temp_config(config_data, tmp_path)
+        config = load_config(config_file)
+        assert config.images == []
+
+    def test_config_missing_subtitles_key(self, tmp_path):
+        config_data = {
+            "project": {"name": "test"},
+            "images": [{"id": "img1", "path": "test.jpg"}],
+        }
+        config_file = create_temp_config(config_data, tmp_path)
+        config = load_config(config_file)
+        assert config.subtitles == []
+
+    def test_config_file_not_found(self):
+        with pytest.raises(FileNotFoundError, match="配置文件不存在"):
+            load_config("/nonexistent/path/config.yaml")
