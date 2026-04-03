@@ -758,13 +758,13 @@ class SubtitleTUI(App):
 
                     with Horizontal(id="controls_row2"):
                         yield Label("FPS:", id="fps_label")
-                        yield Input(value="30", id="project_fps_input", width=6)
+                        yield Input(value="30", id="project_fps_input")
                         yield Label("宽:", id="width_label")
-                        yield Input(value="1080", id="project_width_input", width=6)
+                        yield Input(value="1080", id="project_width_input")
                         yield Label("高:", id="height_label")
-                        yield Input(value="1920", id="project_height_input", width=6)
+                        yield Input(value="1920", id="project_height_input")
                         yield Label("语音:", id="voice_label")
-                        yield Input(value="zh-CN-XiaoxiaoNeural", id="default_voice_input", width=20)
+                        yield Input(value="zh-CN-XiaoxiaoNeural", id="default_voice_input")
 
                 # 下部：预览区 (类似 Harlequin 的 Results Viewer)
                 with Vertical(id="preview_section"):
