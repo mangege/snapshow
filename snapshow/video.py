@@ -5,6 +5,7 @@ import os
 import platform
 import shutil
 import subprocess
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from .timeline import ImageSegment
 from .utils import find_ffmpeg, find_ffprobe, find_zh_font
 
 logger = logging.getLogger(__name__)
+
+
+def _run_ffmpeg(cmd: list[str], description: str = "FFmpeg") -> None:
+    """运行 FFmpeg 命令，失败时抛出带上下文的异常"""
+    try:
+        subprocess.run(cmd, capture_output=True, check=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"{description} 命令失败: {' '.join(cmd)}\nstderr: {e.stderr}") from e
 
 
 @lru_cache(maxsize=1)
@@ -246,7 +255,7 @@ def create_image_segment_video(
         ]
     )
 
-    subprocess.run(cmd, capture_output=True, check=True)
+    _run_ffmpeg(cmd, "创建视频片段")
     logger.info(f"生成视频片段: {output_path.name}")
 
 
@@ -325,7 +334,7 @@ def merge_videos_with_xfade(
         ]
     )
 
-    subprocess.run(cmd, capture_output=True, check=True)
+    _run_ffmpeg(cmd, "合并视频(xfade)")
     logger.info(f"合并视频完成 (xfade): {output_path.name}")
 
 
@@ -337,10 +346,9 @@ def merge_audio_ffmpeg(audio_paths: list[Path], output_path: Path) -> None:
             f.write(f"file '{p.absolute()}'\n")
 
     ffmpeg = find_ffmpeg()
-    subprocess.run(
+    _run_ffmpeg(
         [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(output_path)],
-        capture_output=True,
-        check=True,
+        "合并音频",
     )
 
 
@@ -350,28 +358,22 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
     """
     clips_dir = work_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
-    audio_dir = work_dir / "audio"
-    audio_dir.mkdir(parents=True, exist_ok=True)
 
     video_paths = []
     all_audio_paths = []
 
     for i, segment in enumerate(timeline):
-        # 补偿转场时长（非最后一段）
-        original_end = segment.end
         if i < len(timeline) - 1:
-            segment.end += config.transition_duration
+            adjusted_segment = replace(segment, end=segment.end + config.transition_duration)
+        else:
+            adjusted_segment = segment
 
         clip_path = clips_dir / f"clip_{i:03d}.mp4"
-        create_image_segment_video(segment, config.style, config, clip_path, base_dir)
+        create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir)
         video_paths.append(clip_path)
 
-        # 收集音频
         for sub in segment.subtitles:
             all_audio_paths.append(Path(sub.audio_path))
-
-        # 还原 segment 以免影响后续
-        segment.end = original_end
 
     # 1. 合并视频流
     video_only = work_dir / "video_only.mp4"
@@ -387,7 +389,7 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
         final_output = work_dir / output_name
 
         ffmpeg = find_ffmpeg()
-        subprocess.run(
+        _run_ffmpeg(
             [
                 ffmpeg,
                 "-y",
@@ -405,8 +407,7 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
                 "1:a:0",
                 str(final_output),
             ],
-            capture_output=True,
-            check=True,
+            "最终封装",
         )
     else:
         final_output = video_only
