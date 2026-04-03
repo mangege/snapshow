@@ -154,3 +154,30 @@ class TestConfigEdgeCases:
     def test_config_file_not_found(self):
         with pytest.raises(FileNotFoundError, match="配置文件不存在"):
             load_config("/nonexistent/path/config.yaml")
+
+
+def test_public_api_exports():
+    from snapshow import (
+        ProjectConfig,
+        SubtitleConfig,
+        ImageConfig,
+        VoiceConfig,
+        SubtitleStyle,
+        load_config,
+        validate_config,
+        build_timeline,
+        generate_video,
+        generate_voices,
+        find_ffmpeg,
+        find_ffprobe,
+        find_zh_font,
+    )
+
+    assert callable(load_config)
+    assert callable(validate_config)
+    assert callable(build_timeline)
+    assert callable(generate_video)
+    assert callable(generate_voices)
+    assert callable(find_ffmpeg)
+    assert callable(find_ffprobe)
+    assert callable(find_zh_font)
