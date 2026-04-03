@@ -523,6 +523,34 @@ class SubtitleTUI(App):
         padding: 0 1;
     }
 
+    #controls_row2 {
+        height: 3;
+        background: $surface;
+        border-top: solid $panel;
+        layout: horizontal;
+        padding: 0 1;
+    }
+
+    #controls_row2 > * {
+        height: 100%;
+        content-align: left middle;
+        color: $text;
+    }
+
+    #fps_label, #width_label, #height_label, #voice_label {
+        margin-right: 1;
+        color: $text;
+    }
+
+    #project_fps_input, #project_width_input, #project_height_input, #default_voice_input {
+        height: 1;
+        background: $background;
+        color: $text;
+        border: none;
+        padding: 0 1;
+        margin-right: 2;
+    }
+
     /* 头部与尾部 */
     Header {
         background: $primary;
@@ -546,14 +574,6 @@ class SubtitleTUI(App):
     #title_label, #logo_label, #char_limit_label {
         margin-right: 1;
         color: $text;
-    }
-    #char_limit {
-        width: 6;
-        height: 1;
-        background: $background;
-        color: $text;
-        border: none;
-        padding: 0 1;
     }
     """
 
@@ -635,6 +655,15 @@ class SubtitleTUI(App):
             project = config.get("project", {})
             self.query_one("#project_title_input", Input).value = project.get("title", "")
             self.query_one("#project_logo_input", Input).value = project.get("logo", "")
+            self.query_one("#project_fps_input", Input).value = str(project.get("fps", 30))
+            self.query_one("#project_width_input", Input).value = str(project.get("width", 1080))
+            self.query_one("#project_height_input", Input).value = str(project.get("height", 1920))
+
+            # 从第一个 subtitle 读取默认语音
+            subtitles = config.get("subtitles", [])
+            if subtitles and "voice" in subtitles[0]:
+                voice = subtitles[0]["voice"].get("voice", "zh-CN-XiaoxiaoNeural")
+                self.query_one("#default_voice_input", Input).value = voice
 
             # 2. 还原图片和字幕数据
             img_id_to_path = {img["id"]: img["path"] for img in config.get("images", [])}
@@ -727,6 +756,16 @@ class SubtitleTUI(App):
                         yield Label("每屏字数:", id="char_limit_label")
                         yield Input(value=str(self.max_chars), id="char_limit")
 
+                    with Horizontal(id="controls_row2"):
+                        yield Label("FPS:", id="fps_label")
+                        yield Input(value="30", id="project_fps_input", width=6)
+                        yield Label("宽:", id="width_label")
+                        yield Input(value="1080", id="project_width_input", width=6)
+                        yield Label("高:", id="height_label")
+                        yield Input(value="1920", id="project_height_input", width=6)
+                        yield Label("语音:", id="voice_label")
+                        yield Input(value="zh-CN-XiaoxiaoNeural", id="default_voice_input", width=20)
+
                 # 下部：预览区 (类似 Harlequin 的 Results Viewer)
                 with Vertical(id="preview_section"):
                     self.preview_list = ListView(id="preview_list")
@@ -804,12 +843,26 @@ class SubtitleTUI(App):
         title = self.query_one("#project_title_input", Input).value
         logo = self.query_one("#project_logo_input", Input).value
 
+        try:
+            fps = int(self.query_one("#project_fps_input", Input).value or 30)
+        except ValueError:
+            fps = 30
+        try:
+            width = int(self.query_one("#project_width_input", Input).value or 1080)
+        except ValueError:
+            width = 1080
+        try:
+            height = int(self.query_one("#project_height_input", Input).value or 1920)
+        except ValueError:
+            height = 1920
+        voice = self.query_one("#default_voice_input", Input).value or "zh-CN-XiaoxiaoNeural"
+
         config_dict = {
             "project": {
                 "name": "tui_project",
-                "fps": 30,
-                "width": 1080,
-                "height": 1920,
+                "fps": fps,
+                "width": width,
+                "height": height,
                 "output_dir": "./output",
                 "title": title,
                 "logo": logo,
@@ -835,7 +888,7 @@ class SubtitleTUI(App):
                         "id": f"sub_{sub_count:03d}",
                         "text": seg,
                         "image": img_id,
-                        "voice": {"voice": "zh-CN-XiaoxiaoNeural"},
+                        "voice": {"voice": voice},
                     }
                 )
                 sub_count += 1
