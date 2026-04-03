@@ -1,13 +1,16 @@
-from snapshow.config import ProjectConfig, SubtitleConfig, ImageConfig, VoiceConfig, SubtitleStyle
-from snapshow.config import load_config, validate_config
-
+from snapshow.config import (
+    ImageConfig,
+    ProjectConfig,
+    SubtitleConfig,
+    SubtitleStyle,
+    VoiceConfig,
+    load_config,
+    validate_config,
+)
 from snapshow.timeline import build_timeline
-
-from snapshow.video import generate_video
-
-from snapshow.voice import generate_voices
-
 from snapshow.utils import find_ffmpeg, find_ffprobe, find_zh_font
+from snapshow.video import generate_video
+from snapshow.voice import generate_voices
 
 __all__ = [
     "ProjectConfig",

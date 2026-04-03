@@ -158,19 +158,14 @@ class TestConfigEdgeCases:
 
 def test_public_api_exports():
     from snapshow import (
-        ProjectConfig,
-        SubtitleConfig,
-        ImageConfig,
-        VoiceConfig,
-        SubtitleStyle,
-        load_config,
-        validate_config,
         build_timeline,
-        generate_video,
-        generate_voices,
         find_ffmpeg,
         find_ffprobe,
         find_zh_font,
+        generate_video,
+        generate_voices,
+        load_config,
+        validate_config,
     )
 
     assert callable(load_config)

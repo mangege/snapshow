@@ -1,13 +1,11 @@
 """测试视频合成模块"""
 
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from dataclasses import replace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from snapshow.timeline import ImageSegment, SubtitleSegment
-from snapshow.config import ProjectConfig, SubtitleStyle
+from snapshow.config import ProjectConfig
+from snapshow.timeline import ImageSegment
 
 
 class TestSegmentEndMutation:

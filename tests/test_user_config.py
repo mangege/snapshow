@@ -5,8 +5,6 @@ from pathlib import Path
 import yaml
 
 from snapshow.user_config import (
-    DEFAULT_USER_CONFIG,
-    USER_CONFIG_DIR,
     USER_CONFIG_PATH,
     init_user_config,
     load_user_config,

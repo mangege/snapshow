@@ -1,8 +1,6 @@
 """测试跨平台工具模块"""
 
-from pathlib import Path
 
-import pytest
 
 from snapshow.utils import find_ffmpeg, find_ffprobe, find_zh_font, temp_work_dir
 
