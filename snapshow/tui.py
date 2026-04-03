@@ -1,13 +1,12 @@
 import io
 import logging
 import re
-import threading
 from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -58,15 +57,17 @@ class HelpScreen(ModalScreen):
                 "全局快捷键:\n"
                 "  Ctrl+Q : 退出程序\n"
                 "  Ctrl+S : 保存 YAML 配置\n"
-                "  F3     : 预览 YAML 配置\n"
+                "  Ctrl+R : 预览 YAML 配置\n"
                 "  Ctrl+G : 调用 FFmpeg 生成视频\n"
                 "  Ctrl+T : 在 亮色/深色 主题间切换\n"
                 "  Ctrl+B : 切换侧边栏显示/隐藏\n\n"
                 "导航快捷键:\n"
-                "  F1 : 显示此帮助\n"
-                "  F2 : 聚焦 [文案编辑器]\n"
-                "  F5 : 聚焦 [预览分段列表]\n"
-                "  F6 : 聚焦 [图片文件列表]\n\n"
+                "  F1     : 显示此帮助\n"
+                "  Ctrl+E : 聚焦 [文案编辑器]\n"
+                "  Ctrl+P : 聚焦 [预览分段列表]\n"
+                "  Ctrl+I : 聚焦 [图片文件列表]\n\n"
+                "编辑快捷键:\n"
+                "  Ctrl+Z : 撤销\n\n"
                 "按任意键返回主界面",
                 id="help_content",
             )
@@ -559,15 +560,16 @@ class SubtitleTUI(App):
     BINDINGS = [
         Binding("ctrl+q", "quit", "退出", show=True, priority=True),
         Binding("ctrl+s", "save", "保存", show=True),
-        Binding("f3", "preview_config", "配置预览", show=True),
         Binding("ctrl+g", "generate", "生成", show=True),
+        Binding("ctrl+r", "preview_config", "预览配置", show=True),
+        Binding("ctrl+e", "focus_editor", "编辑器", show=True),
+        Binding("ctrl+p", "focus_preview", "预览", show=True),
+        Binding("ctrl+i", "focus_sidebar", "文件树", show=True),
+        Binding("ctrl+z", "undo", "撤销", show=True),
         Binding("ctrl+t", "toggle_theme", "主题", show=True),
         Binding("ctrl+b", "toggle_sidebar", "侧边栏", show=True),
+        Binding("ctrl+u", "user_config", "设置", show=True),
         Binding("f1", "show_help", "帮助", show=True),
-        Binding("ctrl+u", "user_config", "用户配置", show=True),
-        Binding("f2", "focus_editor", "编辑器", show=False),
-        Binding("f5", "focus_preview", "聚焦预览", show=False),
-        Binding("f6", "focus_sidebar", "资源", show=False),
     ]
 
     def __init__(self):
@@ -580,9 +582,9 @@ class SubtitleTUI(App):
         self.theme = "textual-light"
         self.text_area.read_only = False
         # 设置初始 border title，显示当前文件夹名
-        self.query_one("#sidebar_pane").border_title = f"图片列表 ({Path.cwd().name}) [F6]"
-        self.query_one("#editor_section").border_title = "内容编辑 (F2)"
-        self.query_one("#preview_section").border_title = "分段预览 (F5)"
+        self.query_one("#sidebar_pane").border_title = f"图片列表 ({Path.cwd().name}) [Ctrl+I]"
+        self.query_one("#editor_section").border_title = "内容编辑 (Ctrl+E)"
+        self.query_one("#preview_section").border_title = "分段预览 (Ctrl+P)"
 
         # 动态更新 App 标题为完整路径
         self.title = f"snapshow - {Path.cwd()}"
@@ -676,6 +678,9 @@ class SubtitleTUI(App):
 
     def action_focus_preview(self):
         self.query_one("#preview_list").focus()
+
+    def action_undo(self):
+        self.text_area.undo()
 
     def action_user_config(self):
         """打开用户级配置编辑界面"""
