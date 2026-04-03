@@ -213,14 +213,13 @@ def create_image_segment_video(
         filters.append(_make_drawtext(text, style.font_size * 1.5))
 
     elif segment.image_id == "__account__":
-        # 显示用户名和 @账号ID
-        account_lines = []
+        # 显示用户名和 @账号ID（两个独立 drawtext，避免换行符转义问题）
         if config.account_name:
-            account_lines.append(_escape_text(config.account_name))
+            filters.append(_make_drawtext(_escape_text(config.account_name), style.font_size * 1.5, y="(h-th)/2 - th"))
         if config.account_id:
-            account_lines.append(_escape_text(f"@{config.account_id}"))
-        account_text = "\\n".join(account_lines)
-        filters.append(_make_drawtext(account_text, style.font_size * 1.5))
+            filters.append(
+                _make_drawtext(_escape_text(f"@{config.account_id}"), style.font_size * 1.5, y="(h-th)/2 + th*0.5")
+            )
 
         if config.powered_by:
             credits_text = _escape_text("Powered by snapshow")

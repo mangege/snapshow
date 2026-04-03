@@ -69,22 +69,48 @@ async def get_audio_duration(audio_path: Path) -> float:
     return float(result.stdout.strip())
 
 
-def generate_voices(subtitles: list, output_dir: Path) -> dict[str, tuple[Path, float]]:
+def generate_voices(
+    subtitles: list,
+    output_dir: Path,
+    title: str = "",
+    title_voice: VoiceConfig | None = None,
+) -> dict[str, tuple[Path, float]]:
     """
     批量生成语音文件
 
     Args:
         subtitles: SubtitleConfig 列表
         output_dir: 音频输出目录
+        title: 标题文本，如不为空则生成 __title__ 音频
+        title_voice: 标题语音配置，默认使用第一条字幕的语音
 
     Returns:
         {subtitle_id: (audio_path, duration)}
     """
+    from .config import VoiceConfig
+
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if title_voice is None and subtitles:
+        title_voice = subtitles[0].voice
+    elif title_voice is None:
+        title_voice = VoiceConfig()
 
     async def _generate_all():
         tasks = []
         results = {}
+
+        if title:
+            audio_path = output_dir / "__title__.mp3"
+            task = generate_voice_async(
+                text=title,
+                output_path=audio_path,
+                voice=title_voice.voice,
+                rate=title_voice.rate,
+                volume=title_voice.volume,
+                pitch=title_voice.pitch,
+            )
+            tasks.append(("__title__", task))
 
         for i, sub in enumerate(subtitles):
             audio_path = output_dir / f"{sub.id}.mp3"

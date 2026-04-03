@@ -566,7 +566,7 @@ class SubtitleTUI(App):
 
     /* 控制栏 */
     #controls {
-        height: auto;
+        height: 3;
         background: $surface;
         border-top: solid $panel;
         layout: horizontal;
@@ -574,9 +574,23 @@ class SubtitleTUI(App):
     }
 
     #controls > Label {
-        height: 100%;
+        height: 1;
         content-align: left middle;
         color: $text;
+    }
+
+    #controls > Input {
+        height: 1;
+    }
+
+    #controls > Label {
+        height: 1;
+        content-align: left middle;
+        color: $text;
+    }
+
+    #controls > Input {
+        height: 1;
     }
 
     #char_limit {
@@ -597,7 +611,7 @@ class SubtitleTUI(App):
         padding: 0 1;
     }
 
-    #controls_row2 > * {
+    #controls_row2 > Label {
         height: 100%;
         content-align: left middle;
         color: $text;
@@ -823,15 +837,15 @@ class SubtitleTUI(App):
 
                     with Horizontal(id="controls"):
                         yield Label("标题:", id="title_label")
-                        yield Input(placeholder="视频标题", id="project_title_input")
+                        yield Input(placeholder="视频标题", id="project_title_input", compact=True)
                         yield Label("用户名:", id="account_name_label")
-                        yield Input(placeholder="结尾显示的用户名", id="project_account_name_input")
+                        yield Input(placeholder="结尾显示的用户名", id="project_account_name_input", compact=True)
                         yield Label("账号ID:", id="account_id_label")
-                        yield Input(placeholder="如抖音号，显示时加 @", id="project_account_id_input")
+                        yield Input(placeholder="如抖音号，显示时加 @", id="project_account_id_input", compact=True)
 
                     with Horizontal(id="controls_row2"):
                         yield Label("每屏字数:", id="char_limit_label")
-                        yield Input(value=str(self.max_chars), id="char_limit")
+                        yield Input(value=str(self.max_chars), id="char_limit", compact=True)
                         yield Label("分辨率:", id="resolution_label")
                         yield Select(
                             options=[(label, f"{w}x{h}") for label, (w, h) in RESOLUTION_PRESETS],
@@ -1016,7 +1030,7 @@ class SubtitleTUI(App):
             with temp_work_dir() as audio_parent:
                 audio_dir = audio_parent / "audio"
                 audio_dir.mkdir()
-                audio_info = generate_voices(config.subtitles, audio_dir)
+                audio_info = generate_voices(config.subtitles, audio_dir, title=config.title)
 
                 timeline = build_timeline(
                     config.images,

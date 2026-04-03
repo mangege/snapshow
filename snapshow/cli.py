@@ -62,19 +62,7 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
 
     with temp_work_dir() as audio_parent:
         audio_dir = audio_parent / "audio"
-        audio_info = generate_voices(config.subtitles, audio_dir)
-
-        # 生成标题语音
-        if config.title:
-            import asyncio
-
-            from .voice import generate_voice_async
-
-            title_audio_path = audio_dir / "__title__.mp3"
-            duration = asyncio.run(
-                generate_voice_async(text=config.title, output_path=title_audio_path, voice="zh-CN-XiaoxiaoNeural")
-            )
-            audio_info["__title__"] = (title_audio_path, duration)
+        audio_info = generate_voices(config.subtitles, audio_dir, title=config.title)
 
         logger.info(f"配音生成完成，共 {len(audio_info)} 条")
 
