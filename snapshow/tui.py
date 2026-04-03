@@ -411,12 +411,12 @@ class GenerationLogScreen(ModalScreen):
 
 class ImageFileTree(DirectoryTree):
     def filter_paths(self, paths: list[Path]) -> list[Path]:
-        return [
+        filtered = [
             path
-            for paths in [paths]
             for path in paths
-            if not path.name.startswith(".") and (path.is_dir() or path.suffix.lower() in [".jpg", ".jpeg", ".png"])
+            if not path.name.startswith(".") and (path.is_dir() or path.suffix.lower() in {".jpg", ".jpeg", ".png"})
         ]
+        return sorted(filtered, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 class SubtitleTUI(App):
@@ -799,12 +799,14 @@ class SubtitleTUI(App):
 
         segments = self.split_text(text, self.max_chars)
 
+        current_time = 0.0
         for i, seg in enumerate(segments):
-            display_text = seg
             est_duration = len(seg) * 0.25 + 0.5
-
+            start_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
+            current_time += est_duration
+            end_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
             item = ListItem(
-                Static(f"[b]{i + 1}.[/][segment-text] {display_text} [/] [segment-meta]({est_duration:.1f}s)[/]"),
+                Static(f"[b]{i + 1}.[/][segment-text] {seg} [/] [segment-meta]({start_mmss} - {end_mmss})[/]"),
                 classes="segment-item",
             )
             self.preview_list.append(item)
@@ -926,11 +928,9 @@ class SubtitleTUI(App):
             logger.setLevel(logging.INFO)
 
         try:
-            import shutil
-            import tempfile
-
             from .config import load_config, validate_config
             from .timeline import build_timeline
+            from .utils import temp_work_dir
             from .video import generate_video
             from .voice import generate_voices
 
@@ -939,31 +939,24 @@ class SubtitleTUI(App):
             validate_config(config, base_dir)
 
             # 1. 生成配音
-            audio_dir = Path(tempfile.mkdtemp()) / "audio"
-            audio_info = generate_voices(config.subtitles, audio_dir)
+            with temp_work_dir() as audio_parent:
+                audio_dir = audio_parent / "audio"
+                audio_dir.mkdir()
+                audio_info = generate_voices(config.subtitles, audio_dir)
 
-            # 2. 计算时间线
-            timeline = build_timeline(
-                config.images,
-                config.subtitles,
-                audio_info,
-                config.transition_duration,
-                title=config.title,
-                logo=config.logo,
-            )
+                # 2. 计算时间线
+                timeline = build_timeline(
+                    config.images,
+                    config.subtitles,
+                    audio_info,
+                    config.transition_duration,
+                    title=config.title,
+                    logo=config.logo,
+                )
 
-            # 3. 生成视频
-            work_dir = Path(tempfile.mkdtemp()) / "snapshow_work"
-            work_dir.mkdir(parents=True, exist_ok=True)
-
-            final_audio_dir = work_dir / "audio"
-            final_audio_dir.mkdir(parents=True, exist_ok=True)
-            for sub_id, (path, duration) in audio_info.items():
-                new_path = final_audio_dir / path.name
-                shutil.copy2(path, new_path)
-                audio_info[sub_id] = (new_path, duration)
-
-            output_path = generate_video(config, timeline, work_dir, base_dir)
+                # 3. 生成视频
+                with temp_work_dir() as work_dir:
+                    output_path = generate_video(config, timeline, work_dir, base_dir)
 
             log_screen.app.call_from_thread(log_screen.set_finished, True, str(output_path))
 
