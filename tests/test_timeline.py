@@ -6,6 +6,7 @@ from snapshow.timeline import build_timeline
 
 class MockAudioInfo:
     """模拟音频信息"""
+
     pass
 
 
@@ -121,4 +122,46 @@ class TestBuildTimeline:
         timeline = build_timeline(images, subtitles, audio_info)
 
         for i in range(1, len(timeline)):
-            assert timeline[i].start == timeline[i-1].end
+            assert timeline[i].start == timeline[i - 1].end
+
+
+class TestTimelineEdgeCases:
+    def test_empty_images_list(self):
+        timeline = build_timeline([], [], {}, 0.5)
+        assert timeline == []
+
+    def test_empty_subtitles_list(self):
+        images = [make_image("img1", "test.jpg")]
+        timeline = build_timeline(images, [], {}, 0.5)
+        assert len(timeline) == 1
+        assert timeline[0].image_id == "img1"
+        assert timeline[0].end - timeline[0].start == 3.0
+
+    def test_title_without_audio(self):
+        """Title not created when no __title__ in audio_info"""
+        images = [make_image("img1", "test.jpg")]
+        subtitles = [make_subtitle("sub1", "hello", "img1")]
+        audio_info = {"sub1": ("/path/sub1.mp3", 2.0)}
+        timeline = build_timeline(images, subtitles, audio_info, 0.5, title="My Title")
+        assert all(seg.image_id != "__title__" for seg in timeline)
+
+    def test_logo_creates_black_segment(self):
+        images = [make_image("img1", "test.jpg")]
+        subtitles = [make_subtitle("sub1", "hello", "img1")]
+        audio_info = {"sub1": ("/path/sub1.mp3", 2.0)}
+        timeline = build_timeline(images, subtitles, audio_info, 0.5, logo="MyLogo")
+        logo_seg = [s for s in timeline if s.image_id == "__logo__"]
+        assert len(logo_seg) == 1
+        assert logo_seg[0].image_path == "__black__"
+        assert logo_seg[0].end - logo_seg[0].start == 1.0
+
+    def test_title_creates_black_segment(self):
+        images = [make_image("img1", "test.jpg")]
+        subtitles = [make_subtitle("sub1", "hello", "img1")]
+        audio_info = {"sub1": ("/path/sub1.mp3", 2.0), "__title__": ("/path/title.mp3", 1.5)}
+        timeline = build_timeline(images, subtitles, audio_info, 0.5, title="My Title")
+        title_seg = [s for s in timeline if s.image_id == "__title__"]
+        assert len(title_seg) == 1
+        assert title_seg[0].image_path == "__black__"
+        assert title_seg[0].end - title_seg[0].start == 1.5
+        assert title_seg[0].start == 0.0

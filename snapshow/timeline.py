@@ -127,22 +127,6 @@ def build_timeline(
     return timeline
 
 
-def merge_audio_commands(timeline: list[ImageSegment], output_path: str) -> str:
-    """生成 FFmpeg 合并音频的命令"""
-    all_audio_paths = []
-    for seg in timeline:
-        all_audio_paths.extend(seg.audio_paths)
-
-    if not all_audio_paths:
-        return ""
-
-    inputs = " ".join([f"-i '{p}'" for p in all_audio_paths])
-    filter_complex = "".join([f"[{i}:a]" for i in range(len(all_audio_paths))])
-    filter_complex += f"concat=n={len(all_audio_paths)}:v=0:a=1[outa]"
-
-    return f"{inputs} -filter_complex '{filter_complex}' -map '[outa]' '{output_path}'"
-
-
 def print_timeline(timeline: list[ImageSegment]) -> None:
     """打印时间线供调试"""
     print("\n=== 时间线 ===")
