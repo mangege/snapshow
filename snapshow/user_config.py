@@ -13,11 +13,11 @@ USER_CONFIG_PATH = USER_CONFIG_DIR / "config.yaml"
 
 DEFAULT_USER_CONFIG = {
     "project": {
-        "logo": "",
+        "account_name": "",
+        "account_id": "",
         "powered_by": True,
         "fps": 30,
-        "width": 1080,
-        "height": 1920,
+        "resolution": "1080x1920",
         "output_dir": "./output",
     },
     "voice": {

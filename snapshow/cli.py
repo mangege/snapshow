@@ -85,7 +85,8 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
             audio_info,
             config.transition_duration,
             title=config.title,
-            logo=config.logo,
+            account_name=config.account_name,
+            account_id=config.account_id,
         )
         print_timeline(timeline)
 
@@ -171,10 +172,11 @@ def config_show():
     project = uc.get("project", {})
     voice = uc.get("voice", {})
     print("\n[项目默认]")
-    print(f"  Logo:       {project.get('logo', '(未设置)')}")
+    print(f"  用户名:     {project.get('account_name', '(未设置)')}")
+    print(f"  账号ID:     {project.get('account_id', '(未设置)')}")
     print(f"  片尾署名:   {project.get('powered_by', True)}")
     print(f"  FPS:        {project.get('fps', 30)}")
-    print(f"  分辨率:     {project.get('width', 1080)}x{project.get('height', 1920)}")
+    print(f"  分辨率:     {project.get('resolution', '1080x1920')}")
     print(f"  输出目录:   {project.get('output_dir', './output')}")
     print("\n[声音默认]")
     print(f"  声音:       {voice.get('voice', 'zh-CN-XiaoxiaoNeural')}")
@@ -184,13 +186,14 @@ def config_show():
 
 
 @config.command("set")
-@click.option("--logo", help="默认 Logo 文字")
+@click.option("--account-name", help="默认用户名")
+@click.option("--account-id", help="默认账号ID（显示时加 @）")
 @click.option("--powered-by/--no-powered-by", default=None, help="是否片尾署名")
 @click.option("--fps", type=int, help="默认帧率")
 @click.option(
     "--resolution",
-    type=click.Choice(["9:16", "16:9", "1:1", "4:3", "3:4"]),
-    help="分辨率比例",
+    type=str,
+    help="分辨率 (如 1080x1920)",
 )
 @click.option("--voice", help="默认 edge-tts 声音")
 @click.option("--rate", help="默认语速 (如 +10%)")
@@ -201,8 +204,11 @@ def config_set(**kwargs):
     uc = load_user_config()
     changed = False
 
-    if kwargs.get("logo") is not None:
-        uc.setdefault("project", {})["logo"] = kwargs["logo"]
+    if kwargs.get("account_name") is not None:
+        uc.setdefault("project", {})["account_name"] = kwargs["account_name"]
+        changed = True
+    if kwargs.get("account_id") is not None:
+        uc.setdefault("project", {})["account_id"] = kwargs["account_id"]
         changed = True
     if kwargs.get("powered_by") is not None:
         uc.setdefault("project", {})["powered_by"] = kwargs["powered_by"]
@@ -211,16 +217,7 @@ def config_set(**kwargs):
         uc.setdefault("project", {})["fps"] = kwargs["fps"]
         changed = True
     if kwargs.get("resolution") is not None:
-        res_map = {
-            "9:16": (1080, 1920),
-            "16:9": (1920, 1080),
-            "1:1": (1080, 1080),
-            "4:3": (1280, 960),
-            "3:4": (960, 1280),
-        }
-        w, h = res_map[kwargs["resolution"]]
-        uc.setdefault("project", {})["width"] = w
-        uc.setdefault("project", {})["height"] = h
+        uc.setdefault("project", {})["resolution"] = kwargs["resolution"]
         changed = True
     if kwargs.get("voice") is not None:
         uc.setdefault("voice", {})["voice"] = kwargs["voice"]

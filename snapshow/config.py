@@ -55,8 +55,9 @@ class ProjectConfig:
     style: SubtitleStyle = field(default_factory=SubtitleStyle)
     transition_duration: float = 0.5
     output_dir: str = "./output"
-    title: str = ""  # 视频开头的标题
-    logo: str = ""  # 视频结尾的 Logo 文字
+    title: str = ""  # 视频标题，开头显示
+    account_name: str = ""  # 用户名，结尾显示
+    account_id: str = ""  # 账号ID，结尾显示时加 @
     powered_by: bool = True  # 是否在结尾显示 "Powered by snapshow"
 
 
@@ -139,7 +140,8 @@ def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
         transition_duration=project.get("transition_duration", uc_project.get("transition_duration", 0.5)),
         output_dir=project.get("output_dir", uc_project.get("output_dir", "./output")),
         title=project.get("title", uc_project.get("title", "")),
-        logo=project.get("logo", uc_project.get("logo", "")),
+        account_name=project.get("account_name", uc_project.get("account_name", "")),
+        account_id=project.get("account_id", uc_project.get("account_id", "")),
         powered_by=project.get("powered_by", uc_project.get("powered_by", True)),
     )
 

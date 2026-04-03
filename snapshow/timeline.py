@@ -28,7 +28,8 @@ def build_timeline(
     audio_info: dict[str, tuple],
     transition_duration: float = 0.5,
     title: str = "",
-    logo: str = "",
+    account_name: str = "",
+    account_id: str = "",
 ) -> list[ImageSegment]:
     """
     构建完整时间线
@@ -111,10 +112,10 @@ def build_timeline(
         timeline.append(segment)
         current_time += image_duration
 
-    # 3. 插入 Logo 片段 (黑底白字，1s，无声)
-    if logo:
+    # 3. 插入账号信息片段 (黑底白字，1s，无声)
+    if account_name or account_id:
         segment = ImageSegment(
-            image_id="__logo__",
+            image_id="__account__",
             image_path="__black__",
             start=current_time,
             end=current_time + 1.0,

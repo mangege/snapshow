@@ -207,13 +207,22 @@ def create_image_segment_video(
             parts.append(f"enable='{enable}'")
         return ":".join(parts)
 
-    # 特殊处理标题和 Logo
-    if segment.image_id == "__title__" or segment.image_id == "__logo__":
-        text = _escape_text(config.title if segment.image_id == "__title__" else config.logo)
+    # 特殊处理标题和账号
+    if segment.image_id == "__title__":
+        text = _escape_text(config.title)
         filters.append(_make_drawtext(text, style.font_size * 1.5))
 
-        # 在 Logo 片段中显示 Powered by 信息
-        if segment.image_id == "__logo__" and config.powered_by:
+    elif segment.image_id == "__account__":
+        # 显示用户名和 @账号ID
+        account_lines = []
+        if config.account_name:
+            account_lines.append(_escape_text(config.account_name))
+        if config.account_id:
+            account_lines.append(_escape_text(f"@{config.account_id}"))
+        account_text = "\\n".join(account_lines)
+        filters.append(_make_drawtext(account_text, style.font_size * 1.5))
+
+        if config.powered_by:
             credits_text = _escape_text("Powered by snapshow")
             filters.append(_make_drawtext(credits_text, style.font_size * 0.6, y="(h-th)/2+(h*0.15)"))
     else:

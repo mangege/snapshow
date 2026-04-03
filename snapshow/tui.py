@@ -11,7 +11,6 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
-    Checkbox,
     DirectoryTree,
     Footer,
     Header,
@@ -60,11 +59,11 @@ class HelpScreen(ModalScreen):
                 "  Ctrl+R : 预览 YAML 配置\n"
                 "  Ctrl+G : 调用 FFmpeg 生成视频\n"
                 "  Ctrl+T : 在 亮色/深色 主题间切换\n"
-                "  Ctrl+B : 切换侧边栏显示/隐藏\n\n"
+                "  Ctrl+B : 切换侧边栏显示/隐藏\n"
+                "  Ctrl+O : 用户级配置设置\n\n"
                 "导航快捷键:\n"
                 "  F1     : 显示此帮助\n"
                 "  Ctrl+E : 聚焦 [文案编辑器]\n"
-                "  Ctrl+P : 聚焦 [预览分段列表]\n"
                 "  Ctrl+I : 聚焦 [图片文件列表]\n\n"
                 "编辑快捷键:\n"
                 "  Ctrl+Z : 撤销\n\n"
@@ -132,6 +131,11 @@ class PreviewConfigModal(ModalScreen):
 class LoadConfigModal(ModalScreen):
     """启动时询问是否加载现有配置"""
 
+    BINDINGS = [
+        Binding("y", "load", "加载", show=True, priority=True),
+        Binding("n", "clear", "清空", show=True, priority=True),
+    ]
+
     CSS = """
     LoadConfigModal {
         align: center middle;
@@ -164,14 +168,20 @@ class LoadConfigModal(ModalScreen):
         with Vertical(id="modal_container"):
             yield Static("检测到 project_tui.yaml 现有配置，是否加载？", id="modal_title")
             with Horizontal(id="modal_buttons"):
-                yield Button("加载 (Yes)", variant="primary", id="yes")
-                yield Button("清空 (No)", variant="error", id="no")
+                yield Button("加载 (Y)", variant="primary", id="yes")
+                yield Button("清空 (N)", variant="error", id="no")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "yes":
             self.dismiss(True)
         else:
             self.dismiss(False)
+
+    def action_load(self) -> None:
+        self.dismiss(True)
+
+    def action_clear(self) -> None:
+        self.dismiss(False)
 
 
 RESOLUTION_PRESETS = [
@@ -182,6 +192,24 @@ RESOLUTION_PRESETS = [
     ("正方形 1080x1080", (1080, 1080)),
 ]
 
+VOICE_PRESETS = [
+    ("晓晓 (女)", "zh-CN-XiaoxiaoNeural"),
+    ("云扬 (男)", "zh-CN-YunyangNeural"),
+    ("晓艺 (女)", "zh-CN-XiaoyiNeural"),
+    ("云健 (男)", "zh-CN-YunjianNeural"),
+    ("晓梦 (女)", "zh-CN-XiaomengNeural"),
+    ("云哲 (男)", "zh-CN-YunzheNeural"),
+    ("晓辰 (女)", "zh-CN-XiaochenNeural"),
+    ("晓睿 (女)", "zh-CN-XiaoruiNeural"),
+    ("晓双 (女)", "zh-CN-XiaoshuangNeural"),
+    ("云希 (男)", "zh-CN-YunxiNeural"),
+]
+
+POWERED_BY_OPTIONS = [
+    ("是", True),
+    ("否", False),
+]
+
 
 def _resolve_resolution_label(width: int, height: int) -> int:
     for i, (label, (w, h)) in enumerate(RESOLUTION_PRESETS):
@@ -190,8 +218,20 @@ def _resolve_resolution_label(width: int, height: int) -> int:
     return 0
 
 
+def _resolve_voice_index(voice: str) -> int:
+    for i, (_, v) in enumerate(VOICE_PRESETS):
+        if v == voice:
+            return i
+    return 0
+
+
 class UserConfigEdit(ModalScreen):
     """编辑用户级配置"""
+
+    BINDINGS = [
+        Binding("ctrl+s", "save", "保存", show=True, priority=True),
+        Binding("escape", "cancel", "取消", show=True),
+    ]
 
     CSS = """
     UserConfigEdit {
@@ -222,7 +262,7 @@ class UserConfigEdit(ModalScreen):
         content-align: right middle;
         margin-right: 1;
     }
-    .uc_row Input, .uc_row Checkbox {
+    .uc_row Input {
         width: 1fr;
     }
     .uc_section_title {
@@ -250,75 +290,96 @@ class UserConfigEdit(ModalScreen):
         voice = uc.get("voice", {})
 
         with Vertical(id="uc_container"):
-            yield Static("用户级配置 (Ctrl+U)", id="uc_title")
+            yield Static("用户级配置 (Ctrl+O)", id="uc_title")
 
             with ScrollableContainer(id="uc_scroll"):
                 yield Static("项目默认设置", classes="uc_section_title")
                 with Horizontal(classes="uc_row"):
-                    yield Label("Logo:")
-                    yield Input(value=project.get("logo", ""), placeholder="视频结尾文字", id="uc_logo_input")
+                    yield Label("用户名:")
+                    yield Input(
+                        value=project.get("account_name", ""),
+                        placeholder="结尾显示的用户名",
+                        id="uc_account_name_input",
+                        compact=True,
+                    )
+                with Horizontal(classes="uc_row"):
+                    yield Label("账号ID:")
+                    yield Input(
+                        value=project.get("account_id", ""),
+                        placeholder="如抖音号，显示时加 @",
+                        id="uc_account_id_input",
+                        compact=True,
+                    )
                 with Horizontal(classes="uc_row"):
                     yield Label("片尾署名:")
-                    yield Checkbox(
-                        value=project.get("powered_by", True), id="uc_powered_by", label="显示 Powered by snapshow"
+                    yield Select(
+                        options=POWERED_BY_OPTIONS,
+                        value=project.get("powered_by", True),
+                        id="uc_powered_by",
+                        compact=True,
+                        allow_blank=False,
                     )
                 with Horizontal(classes="uc_row"):
                     yield Label("FPS:")
-                    yield Input(value=str(project.get("fps", 30)), id="uc_fps_input", type="integer")
+                    yield Input(value=str(project.get("fps", 30)), id="uc_fps_input", type="integer", compact=True)
                 with Horizontal(classes="uc_row"):
                     yield Label("分辨率:")
                     yield Select(
-                        options=[(label, i) for i, (label, _) in enumerate(RESOLUTION_PRESETS)],
-                        value=_resolve_resolution_label(project.get("width", 1080), project.get("height", 1920)),
+                        options=[(label, f"{w}x{h}") for label, (w, h) in RESOLUTION_PRESETS],
+                        value=project.get("resolution", "1080x1920"),
                         id="uc_resolution_select",
+                        compact=True,
                     )
 
                 yield Static("默认声音设置", classes="uc_section_title")
                 with Horizontal(classes="uc_row"):
                     yield Label("声音:")
-                    yield Input(
+                    yield Select(
+                        options=[(label, v) for label, v in VOICE_PRESETS],
                         value=voice.get("voice", "zh-CN-XiaoxiaoNeural"),
-                        placeholder="edge-tts 声音",
-                        id="uc_voice_input",
+                        id="uc_voice_select",
+                        allow_blank=False,
+                        compact=True,
                     )
                 with Horizontal(classes="uc_row"):
                     yield Label("语速:")
-                    yield Input(value=voice.get("rate", "+0%"), placeholder="+0%", id="uc_rate_input")
+                    yield Input(value=voice.get("rate", "+0%"), placeholder="+0%", id="uc_rate_input", compact=True)
                 with Horizontal(classes="uc_row"):
                     yield Label("音量:")
-                    yield Input(value=voice.get("volume", "+0%"), placeholder="+0%", id="uc_volume_input")
+                    yield Input(value=voice.get("volume", "+0%"), placeholder="+0%", id="uc_volume_input", compact=True)
                 with Horizontal(classes="uc_row"):
                     yield Label("音调:")
-                    yield Input(value=voice.get("pitch", "+0Hz"), placeholder="+0Hz", id="uc_pitch_input")
+                    yield Input(value=voice.get("pitch", "+0Hz"), placeholder="+0Hz", id="uc_pitch_input", compact=True)
 
-            yield Button("保存用户配置", variant="primary", id="uc_save_btn")
+            yield Button("保存 [Ctrl+S]", variant="primary", id="uc_save_btn")
             yield Static("按 Esc 取消", id="uc_hint")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "uc_save_btn":
             self.save_user_config()
 
-    def on_key(self, event) -> None:
-        if event.key == "escape":
-            self.app.pop_screen()
+    def action_save(self) -> None:
+        self.save_user_config()
+
+    def action_cancel(self) -> None:
+        self.app.pop_screen()
 
     def save_user_config(self) -> None:
         from .user_config import save_user_config
 
-        res_idx = self.query_one("#uc_resolution_select", Select).value
-        width, height = RESOLUTION_PRESETS[res_idx]
+        resolution = self.query_one("#uc_resolution_select", Select).value
 
         config = {
             "project": {
-                "logo": self.query_one("#uc_logo_input", Input).value,
-                "powered_by": self.query_one("#uc_powered_by", Checkbox).value,
+                "account_name": self.query_one("#uc_account_name_input", Input).value,
+                "account_id": self.query_one("#uc_account_id_input", Input).value,
+                "powered_by": self.query_one("#uc_powered_by", Select).value,
                 "fps": int(self.query_one("#uc_fps_input", Input).value or 30),
-                "width": width,
-                "height": height,
+                "resolution": resolution,
             },
             "voice": {
                 "engine": "edge-tts",
-                "voice": self.query_one("#uc_voice_input", Input).value,
+                "voice": self.query_one("#uc_voice_select", Select).value,
                 "rate": self.query_one("#uc_rate_input", Input).value,
                 "volume": self.query_one("#uc_volume_input", Input).value,
                 "pitch": self.query_one("#uc_pitch_input", Input).value,
@@ -453,7 +514,7 @@ class SubtitleTUI(App):
         height: 100%;
         margin-right: 1;
     }
-    
+
     ImageFileTree {
         background: $background;
         color: $text;
@@ -467,17 +528,20 @@ class SubtitleTUI(App):
     }
 
     #editor_section {
-        height: 1fr;
+        height: 2fr;
         margin-bottom: 1;
+        min-height: 15;
     }
 
     #text_input {
+        width: 100%;
         height: 1fr;
+        min-height: 10;
         border: none;
         background: $background;
         color: $text;
     }
-    
+
     /* 适配双模式的光标行 */
     #text_input > .text-area--cursor-line {
         background: $surface;
@@ -502,14 +566,14 @@ class SubtitleTUI(App):
 
     /* 控制栏 */
     #controls {
-        height: 3;
+        height: auto;
         background: $surface;
         border-top: solid $panel;
         layout: horizontal;
         padding: 0 1;
     }
-    
-    #controls > * {
+
+    #controls > Label {
         height: 100%;
         content-align: left middle;
         color: $text;
@@ -517,6 +581,7 @@ class SubtitleTUI(App):
 
     #char_limit {
         width: 6;
+        height: 1;
         background: $background;
         color: $text;
         border: none;
@@ -525,6 +590,7 @@ class SubtitleTUI(App):
 
     #controls_row2 {
         height: 3;
+        max-height: 5;
         background: $surface;
         border-top: solid $panel;
         layout: horizontal;
@@ -537,17 +603,38 @@ class SubtitleTUI(App):
         color: $text;
     }
 
-    #fps_label, #width_label, #height_label, #voice_label {
+    #title_label, #account_name_label, #account_id_label, #char_limit_label, #resolution_label, #voice_label {
         margin-right: 1;
         color: $text;
     }
 
-    #project_fps_input, #project_width_input, #project_height_input, #default_voice_input {
+    #project_title_input, #project_account_name_input, #project_account_id_input {
+        width: 12;
         height: 1;
         background: $background;
         color: $text;
         border: none;
         padding: 0 1;
+        margin-right: 2;
+    }
+
+    #project_resolution_select {
+        height: 1;
+        width: 26;
+        background: $background;
+        color: $text;
+        border: none;
+        padding: 0;
+        margin-right: 2;
+    }
+
+    #project_voice_select {
+        height: 1;
+        width: 20;
+        background: $background;
+        color: $text;
+        border: none;
+        padding: 0;
         margin-right: 2;
     }
 
@@ -562,19 +649,6 @@ class SubtitleTUI(App):
         background: $surface;
         color: $text;
     }
-    #project_title_input, #project_logo_input {
-        width: 15;
-        height: 1;
-        background: $background;
-        color: $text;
-        border: none;
-        padding: 0 1;
-        margin-right: 2;
-    }
-    #title_label, #logo_label, #char_limit_label {
-        margin-right: 1;
-        color: $text;
-    }
     """
 
     BINDINGS = [
@@ -583,12 +657,11 @@ class SubtitleTUI(App):
         Binding("ctrl+g", "generate", "生成", show=True),
         Binding("ctrl+r", "preview_config", "预览配置", show=True),
         Binding("ctrl+e", "focus_editor", "编辑器", show=True),
-        Binding("ctrl+p", "focus_preview", "预览", show=True),
         Binding("ctrl+i", "focus_sidebar", "文件树", show=True),
         Binding("ctrl+z", "undo", "撤销", show=True),
         Binding("ctrl+t", "toggle_theme", "主题", show=True),
         Binding("ctrl+b", "toggle_sidebar", "侧边栏", show=True),
-        Binding("ctrl+u", "user_config", "设置", show=True),
+        Binding("ctrl+o", "user_config", "设置", show=True),
         Binding("f1", "show_help", "帮助", show=True),
     ]
 
@@ -601,19 +674,15 @@ class SubtitleTUI(App):
     def on_mount(self) -> None:
         self.theme = "textual-light"
         self.text_area.read_only = False
-        # 设置初始 border title，显示当前文件夹名
         self.query_one("#sidebar_pane").border_title = f"图片列表 ({Path.cwd().name}) [Ctrl+I]"
         self.query_one("#editor_section").border_title = "内容编辑 (Ctrl+E)"
-        self.query_one("#preview_section").border_title = "分段预览 (Ctrl+P)"
+        self.query_one("#preview_section").border_title = "分段预览"
 
-        # 动态更新 App 标题为完整路径
         self.title = f"snapshow - {Path.cwd()}"
 
-        # 启动时检测并询问是否加载
         if Path("project_tui.yaml").exists():
             self.push_screen(LoadConfigModal(), self.handle_load_decision)
         else:
-            # 没有项目配置时，使用用户级配置默认值
             self.apply_user_config_defaults()
 
     def apply_user_config_defaults(self):
@@ -623,11 +692,10 @@ class SubtitleTUI(App):
         uc = load_user_config()
         project = uc.get("project", {})
         voice = uc.get("voice", {})
-        self.query_one("#project_logo_input", Input).value = project.get("logo", "")
-        self.query_one("#project_fps_input", Input).value = str(project.get("fps", 30))
-        self.query_one("#project_width_input", Input).value = str(project.get("width", 1080))
-        self.query_one("#project_height_input", Input).value = str(project.get("height", 1920))
-        self.query_one("#default_voice_input", Input).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
+        self.query_one("#project_account_name_input", Input).value = project.get("account_name", "")
+        self.query_one("#project_account_id_input", Input).value = project.get("account_id", "")
+        self.query_one("#project_resolution_select", Select).value = project.get("resolution", "1080x1920")
+        self.query_one("#project_voice_select", Select).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
 
     def handle_load_decision(self, should_load: bool):
         if should_load:
@@ -637,7 +705,13 @@ class SubtitleTUI(App):
             self.notify("已开始新项目 (使用用户默认配置)")
 
     def load_initial_config(self):
-        """尝试从 project_tui.yaml 加载配置"""
+        """尝试从 project_tui.yaml 加载配置，缺失字段以用户级配置补齐"""
+        from .user_config import load_user_config
+
+        uc = load_user_config()
+        uc_project = uc.get("project", {})
+        uc_voice = uc.get("voice", {})
+
         config_path = Path("project_tui.yaml")
         if not config_path.exists():
             return
@@ -651,21 +725,24 @@ class SubtitleTUI(App):
             if not config:
                 return
 
-            # 1. 还原项目基础信息
             project = config.get("project", {})
-            self.query_one("#project_title_input", Input).value = project.get("title", "")
-            self.query_one("#project_logo_input", Input).value = project.get("logo", "")
-            self.query_one("#project_fps_input", Input).value = str(project.get("fps", 30))
-            self.query_one("#project_width_input", Input).value = str(project.get("width", 1080))
-            self.query_one("#project_height_input", Input).value = str(project.get("height", 1920))
+            title = project.get("title", "")
+            account_name = project.get("account_name", uc_project.get("account_name", ""))
+            account_id = project.get("account_id", uc_project.get("account_id", ""))
+            resolution = project.get("resolution", uc_project.get("resolution", "1080x1920"))
 
-            # 从第一个 subtitle 读取默认语音
+            self.query_one("#project_title_input", Input).value = title
+            self.query_one("#project_account_name_input", Input).value = account_name
+            self.query_one("#project_account_id_input", Input).value = account_id
+            self.query_one("#project_resolution_select", Select).value = resolution
+
             subtitles = config.get("subtitles", [])
             if subtitles and "voice" in subtitles[0]:
-                voice = subtitles[0]["voice"].get("voice", "zh-CN-XiaoxiaoNeural")
-                self.query_one("#default_voice_input", Input).value = voice
+                voice = subtitles[0]["voice"].get("voice", uc_voice.get("voice", "zh-CN-XiaoxiaoNeural"))
+            else:
+                voice = uc_voice.get("voice", "zh-CN-XiaoxiaoNeural")
+            self.query_one("#project_voice_select", Select).value = voice
 
-            # 2. 还原图片和字幕数据
             img_id_to_path = {img["id"]: img["path"] for img in config.get("images", [])}
 
             temp_image_text = {}
@@ -705,9 +782,6 @@ class SubtitleTUI(App):
     def action_focus_editor(self):
         self.text_area.focus()
 
-    def action_focus_preview(self):
-        self.query_one("#preview_list").focus()
-
     def action_undo(self):
         self.text_area.undo()
 
@@ -741,7 +815,6 @@ class SubtitleTUI(App):
                 yield ImageFileTree("./")
 
             with Vertical(id="main_panel"):
-                # 上部：编辑区 (类似 Harlequin 的 Query Editor)
                 with Vertical(id="editor_section"):
                     self.img_info = Label(" 请在左侧选择图片...")
                     yield self.img_info
@@ -750,23 +823,32 @@ class SubtitleTUI(App):
 
                     with Horizontal(id="controls"):
                         yield Label("标题:", id="title_label")
-                        yield Input(placeholder="视频开头文字", id="project_title_input")
-                        yield Label("Logo:", id="logo_label")
-                        yield Input(placeholder="视频结尾文字", id="project_logo_input")
-                        yield Label("每屏字数:", id="char_limit_label")
-                        yield Input(value=str(self.max_chars), id="char_limit")
+                        yield Input(placeholder="视频标题", id="project_title_input")
+                        yield Label("用户名:", id="account_name_label")
+                        yield Input(placeholder="结尾显示的用户名", id="project_account_name_input")
+                        yield Label("账号ID:", id="account_id_label")
+                        yield Input(placeholder="如抖音号，显示时加 @", id="project_account_id_input")
 
                     with Horizontal(id="controls_row2"):
-                        yield Label("FPS:", id="fps_label")
-                        yield Input(value="30", id="project_fps_input")
-                        yield Label("宽:", id="width_label")
-                        yield Input(value="1080", id="project_width_input")
-                        yield Label("高:", id="height_label")
-                        yield Input(value="1920", id="project_height_input")
+                        yield Label("每屏字数:", id="char_limit_label")
+                        yield Input(value=str(self.max_chars), id="char_limit")
+                        yield Label("分辨率:", id="resolution_label")
+                        yield Select(
+                            options=[(label, f"{w}x{h}") for label, (w, h) in RESOLUTION_PRESETS],
+                            value="1080x1920",
+                            id="project_resolution_select",
+                            allow_blank=False,
+                            compact=True,
+                        )
                         yield Label("语音:", id="voice_label")
-                        yield Input(value="zh-CN-XiaoxiaoNeural", id="default_voice_input")
+                        yield Select(
+                            options=[(label, v) for label, v in VOICE_PRESETS],
+                            value="zh-CN-XiaoxiaoNeural",
+                            id="project_voice_select",
+                            allow_blank=False,
+                            compact=True,
+                        )
 
-                # 下部：预览区 (类似 Harlequin 的 Results Viewer)
                 with Vertical(id="preview_section"):
                     self.preview_list = ListView(id="preview_list")
                     yield self.preview_list
@@ -843,31 +925,22 @@ class SubtitleTUI(App):
             return
 
         title = self.query_one("#project_title_input", Input).value
-        logo = self.query_one("#project_logo_input", Input).value
+        account_name = self.query_one("#project_account_name_input", Input).value
+        account_id = self.query_one("#project_account_id_input", Input).value
 
-        try:
-            fps = int(self.query_one("#project_fps_input", Input).value or 30)
-        except ValueError:
-            fps = 30
-        try:
-            width = int(self.query_one("#project_width_input", Input).value or 1080)
-        except ValueError:
-            width = 1080
-        try:
-            height = int(self.query_one("#project_height_input", Input).value or 1920)
-        except ValueError:
-            height = 1920
-        voice = self.query_one("#default_voice_input", Input).value or "zh-CN-XiaoxiaoNeural"
+        resolution = self.query_one("#project_resolution_select", Select).value
+        width, height = map(int, resolution.split("x"))
+        voice = self.query_one("#project_voice_select", Select).value
 
         config_dict = {
             "project": {
                 "name": "tui_project",
-                "fps": fps,
                 "width": width,
                 "height": height,
                 "output_dir": "./output",
                 "title": title,
-                "logo": logo,
+                "account_name": account_name,
+                "account_id": account_id,
             },
             "images": [],
             "subtitles": [],
@@ -878,11 +951,9 @@ class SubtitleTUI(App):
             if not text.strip():
                 continue
 
-            # 记录图片
             img_id = Path(img_path).stem
             config_dict["images"].append({"id": img_id, "path": img_path})
 
-            # 切分并记录字幕
             segments = self.split_text(text, self.max_chars)
             for seg in segments:
                 config_dict["subtitles"].append(
@@ -926,6 +997,10 @@ class SubtitleTUI(App):
             logger = logging.getLogger(name)
             logger.addHandler(ui_handler)
             logger.setLevel(logging.INFO)
+            logger.propagate = False
+            logger.propagate = False
+            logger.propagate = False
+            logger.propagate = False
 
         try:
             from .config import load_config, validate_config
@@ -938,23 +1013,21 @@ class SubtitleTUI(App):
             base_dir = Path(".").resolve()
             validate_config(config, base_dir)
 
-            # 1. 生成配音
             with temp_work_dir() as audio_parent:
                 audio_dir = audio_parent / "audio"
                 audio_dir.mkdir()
                 audio_info = generate_voices(config.subtitles, audio_dir)
 
-                # 2. 计算时间线
                 timeline = build_timeline(
                     config.images,
                     config.subtitles,
                     audio_info,
                     config.transition_duration,
                     title=config.title,
-                    logo=config.logo,
+                    account_name=config.account_name,
+                    account_id=config.account_id,
                 )
 
-                # 3. 生成视频
                 with temp_work_dir() as work_dir:
                     output_path = generate_video(config, timeline, work_dir, base_dir)
 
