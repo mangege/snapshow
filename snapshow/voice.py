@@ -2,9 +2,12 @@
 
 import asyncio
 import logging
+import subprocess
 from pathlib import Path
 
 import edge_tts
+
+from .utils import find_ffprobe
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ async def generate_voice_async(
 ) -> float:
     """
     异步生成语音文件
-    
+
     Returns:
         音频时长（秒）
     """
@@ -46,14 +49,17 @@ async def generate_voice_async(
 
 async def get_audio_duration(audio_path: Path) -> float:
     """获取音频文件时长（秒）"""
-    import subprocess
+    ffprobe_path = find_ffprobe()
 
     result = subprocess.run(
         [
-            "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            ffprobe_path,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             str(audio_path),
         ],
         capture_output=True,
@@ -66,11 +72,11 @@ async def get_audio_duration(audio_path: Path) -> float:
 def generate_voices(subtitles: list, output_dir: Path) -> dict[str, tuple[Path, float]]:
     """
     批量生成语音文件
-    
+
     Args:
         subtitles: SubtitleConfig 列表
         output_dir: 音频输出目录
-        
+
     Returns:
         {subtitle_id: (audio_path, duration)}
     """
@@ -79,7 +85,7 @@ def generate_voices(subtitles: list, output_dir: Path) -> dict[str, tuple[Path, 
     async def _generate_all():
         tasks = []
         results = {}
-        
+
         for i, sub in enumerate(subtitles):
             audio_path = output_dir / f"{sub.id}.mp3"
             task = generate_voice_async(
