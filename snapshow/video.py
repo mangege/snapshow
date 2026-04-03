@@ -25,46 +25,6 @@ def _run_ffmpeg(cmd: list[str], description: str = "FFmpeg") -> None:
 
 
 @lru_cache(maxsize=1)
-def _detect_gpu_encoder() -> str | None:
-    """检测并验证可用的 GPU 硬件编码器"""
-    encoders = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"]
-    ffmpeg = find_ffmpeg()
-    try:
-        result = subprocess.run(
-            [ffmpeg, "-encoders"],
-            capture_output=True,
-            text=True,
-        )
-
-        for enc in encoders:
-            if enc in result.stdout:
-                test_cmd = [
-                    ffmpeg,
-                    "-y",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "color=black:s=64x64",
-                    "-t",
-                    "0.1",
-                    "-c:v",
-                    enc,
-                    "-f",
-                    "null",
-                    "-",
-                ]
-                test_result = subprocess.run(test_cmd, capture_output=True)
-                if test_result.returncode == 0:
-                    logger.info(f"验证通过，使用 GPU 编码器: {enc}")
-                    return enc
-                else:
-                    logger.warning(f"检测到 {enc} 但验证失败（可能驱动不支持），将尝试下一个...")
-    except Exception:
-        pass
-    logger.info("未发现可用 GPU 编码器，回退至 libx264")
-    return None
-
-
 def _resolve_font(font_name: str) -> tuple[str, str]:
     """将字体名称解析为 ffmpeg drawtext 可用的字体参数
     返回 (param_name, param_value)，param_name 为 'font' 或 'fontfile'
@@ -168,6 +128,11 @@ def create_image_segment_video(
     gpu_encoder = _detect_gpu_encoder()
     codec = gpu_encoder if gpu_encoder else "libx264"
 
+    # 安全边距：抖音会裁切四周（左右 2-3%，上下 5-10%）
+    # 画面缩小到 88% 宽、82% 高，四周留黑边让平台裁切
+    safe_w = int(config.width * 0.88)
+    safe_h = int(config.height * 0.82)
+
     # 滤镜链
     filters = []
     if segment.image_path != "__black__":
@@ -214,32 +179,24 @@ def create_image_segment_video(
 
     elif segment.image_id == "__account__":
         # 显示用户名和 @账号ID（两个独立 drawtext，避免换行符转义问题）
+        # 安全区位置：底部偏上
         if config.account_name:
-            filters.append(_make_drawtext(_escape_text(config.account_name), style.font_size * 1.5, y="(h-th)/2 - th"))
+            filters.append(_make_drawtext(_escape_text(config.account_name), style.font_size * 1.5, y="h*0.35"))
         if config.account_id:
-            filters.append(
-                _make_drawtext(_escape_text(f"@{config.account_id}"), style.font_size * 1.5, y="(h-th)/2 + th*0.5")
-            )
+            filters.append(_make_drawtext(_escape_text(f"@{config.account_id}"), style.font_size * 1.5, y="h*0.45"))
 
         if config.powered_by:
             credits_text = _escape_text("Powered by snapshow")
-            filters.append(_make_drawtext(credits_text, style.font_size * 0.6, y="(h-th)/2+(h*0.15)"))
+            filters.append(_make_drawtext(credits_text, style.font_size * 0.6, y="h*0.65"))
     else:
-        # 普通字幕渲染
+        # 普通字幕渲染（安全区内，单行显示）
         for sub in segment.subtitles:
             start = max(0, sub.start - segment.start)
             end = sub.end - segment.start
-            text = _escape_text(sub.text)
-
-            # 字幕位置
-            if style.position == "bottom":
-                y = f"h-{style.margin_bottom}-th"
-            elif style.position == "top":
-                y = f"{style.margin_bottom}"
-            else:
-                y = "(h-th)/2"
-
             enable = f"between(t,{start},{end})"
+
+            text = _escape_text(sub.text)
+            y = "h*0.78"
             filters.append(_make_drawtext(text, style.font_size, style.font_color, border=True, y=y, enable=enable))
 
     filter_str = ",".join(filters)

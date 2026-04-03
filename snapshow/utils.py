@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -85,6 +86,7 @@ def find_ffprobe() -> str:
     return "ffprobe"
 
 
+@lru_cache(maxsize=1)
 def find_zh_font() -> str | None:
     """
     自动搜索系统中支持中文的字体。

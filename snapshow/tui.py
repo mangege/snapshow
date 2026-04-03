@@ -763,7 +763,7 @@ class SubtitleTUI(App):
             for sub in config.get("subtitles", []):
                 img_id = sub.get("image")
                 if img_id in img_id_to_path:
-                    path = img_id_to_path[img_id]
+                    path = str(Path(img_id_to_path[img_id]).resolve())
                     text = sub.get("text", "")
                     if path not in temp_image_text:
                         temp_image_text[path] = []
@@ -908,7 +908,7 @@ class SubtitleTUI(App):
             self.preview_list.append(item)
 
     def split_text(self, text: str, max_len: int) -> list[str]:
-        parts = re.split(r"[\n。！？；\n]", text)
+        parts = re.split(r"[\n。！？；]", text)
         parts = [p.strip() for p in parts if p.strip()]
 
         final_segments = []
@@ -1011,9 +1011,6 @@ class SubtitleTUI(App):
             logger = logging.getLogger(name)
             logger.addHandler(ui_handler)
             logger.setLevel(logging.INFO)
-            logger.propagate = False
-            logger.propagate = False
-            logger.propagate = False
             logger.propagate = False
 
         try:
