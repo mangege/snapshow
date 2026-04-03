@@ -42,7 +42,7 @@ examples/output/
 *.png
 !examples/images/*.jpg
 !examples/images/*.png
-project_tui.yaml
+/project_tui.yaml
 
 # Temp & Caches
 .tmp/

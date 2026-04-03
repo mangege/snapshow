@@ -1,0 +1,59 @@
+project:
+  name: tui_project
+  width: 1080
+  height: 1920
+  output_dir: ./output
+  title: 《登高》杜甫
+  account_name: 笑话小华
+  account_id: jokerxiaohua
+  max_chars: 10
+images:
+- id: a1
+  path: /home/outman/playspace/snapshow/examples/images/a1.jpg
+- id: a2
+  path: /home/outman/playspace/snapshow/examples/images/a2.jpg
+- id: a3
+  path: /home/outman/playspace/snapshow/examples/images/a3.jpg
+- id: a4
+  path: /home/outman/playspace/snapshow/examples/images/a4.jpg
+subtitles:
+- id: sub_001
+  text: 风急天高猿啸哀
+  image: a1
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_002
+  text: 渚清沙白鸟飞回
+  image: a1
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_003
+  text: 无边落木萧萧下
+  image: a2
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_004
+  text: 不尽长江滚滚来
+  image: a2
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_005
+  text: 万里悲秋常作客
+  image: a3
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_006
+  text: 百年多病独登台
+  image: a3
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_007
+  text: 艰难苦恨繁霜鬓
+  image: a4
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
+- id: sub_008
+  text: 潦倒新停浊酒杯
+  image: a4
+  voice:
+    voice: zh-CN-XiaoxiaoNeural
