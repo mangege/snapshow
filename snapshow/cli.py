@@ -62,7 +62,7 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
 
     with temp_work_dir() as audio_parent:
         audio_dir = audio_parent / "audio"
-        audio_info = generate_voices(config.subtitles, audio_dir, title=config.title)
+        audio_info = generate_voices(config.images, audio_dir, title=config.title, voice=config.voice, rate=config.voice_rate, volume=config.voice_volume, pitch=config.voice_pitch)
 
         logger.info(f"配音生成完成，共 {len(audio_info)} 条")
 
@@ -110,7 +110,7 @@ def preview(config_path: str):
 
     print("\n=== 字幕列表 ===")
     for sub in config.subtitles:
-        print(f"  [{sub.id}] '{sub.text}' -> 图片: {sub.image}, 语音: {sub.voice.voice}")
+        print(f"  [{sub.id}] '{sub.text}' -> 图片: {sub.image}")
 
 
 @main.command()
@@ -159,7 +159,6 @@ def config_show():
     print("\n=== 用户级配置 ===")
     print(f"配置文件: {USER_CONFIG_PATH}")
     project = uc.get("project", {})
-    voice = uc.get("voice", {})
     print("\n[项目默认]")
     print(f"  用户名:     {project.get('account_name', '(未设置)')}")
     print(f"  账号ID:     {project.get('account_id', '(未设置)')}")
@@ -168,11 +167,10 @@ def config_show():
     print(f"  分辨率:     {project.get('resolution', '1080x1920')}")
     print(f"  每屏字数:   {project.get('max_chars', 10)}")
     print(f"  输出目录:   {project.get('output_dir', './output')}")
-    print("\n[声音默认]")
-    print(f"  声音:       {voice.get('voice', 'zh-CN-XiaoxiaoNeural')}")
-    print(f"  语速:       {voice.get('rate', '+0%')}")
-    print(f"  音量:       {voice.get('volume', '+0%')}")
-    print(f"  音调:       {voice.get('pitch', '+0Hz')}")
+    print(f"  声音:       {project.get('voice', 'zh-CN-XiaoxiaoNeural')}")
+    print(f"  语速:       {project.get('voice_rate', '+0%')}")
+    print(f"  音量:       {project.get('voice_volume', '+0%')}")
+    print(f"  音调:       {project.get('voice_pitch', '+0Hz')}")
 
 
 @config.command("set")
@@ -186,9 +184,9 @@ def config_show():
     help="分辨率 (如 1080x1920)",
 )
 @click.option("--voice", help="默认 edge-tts 声音")
-@click.option("--rate", help="默认语速 (如 +10%)")
-@click.option("--volume", help="默认音量 (如 +10%)")
-@click.option("--pitch", help="默认音调 (如 +10Hz)")
+@click.option("--voice-rate", help="默认语速 (如 +10%)")
+@click.option("--voice-volume", help="默认音量 (如 +10%)")
+@click.option("--voice-pitch", help="默认音调 (如 +10Hz)")
 @click.option("--max-chars", type=int, help="默认每屏字数")
 def config_set(**kwargs):
     """设置用户级配置项"""
@@ -213,20 +211,17 @@ def config_set(**kwargs):
     if kwargs.get("max_chars") is not None:
         uc.setdefault("project", {})["max_chars"] = kwargs["max_chars"]
         changed = True
-    if kwargs.get("max_chars") is not None:
-        uc.setdefault("project", {})["max_chars"] = kwargs["max_chars"]
-        changed = True
     if kwargs.get("voice") is not None:
-        uc.setdefault("voice", {})["voice"] = kwargs["voice"]
+        uc.setdefault("project", {})["voice"] = kwargs["voice"]
         changed = True
-    if kwargs.get("rate") is not None:
-        uc.setdefault("voice", {})["rate"] = kwargs["rate"]
+    if kwargs.get("voice_rate") is not None:
+        uc.setdefault("project", {})["voice_rate"] = kwargs["voice_rate"]
         changed = True
-    if kwargs.get("volume") is not None:
-        uc.setdefault("voice", {})["volume"] = kwargs["volume"]
+    if kwargs.get("voice_volume") is not None:
+        uc.setdefault("project", {})["voice_volume"] = kwargs["voice_volume"]
         changed = True
-    if kwargs.get("pitch") is not None:
-        uc.setdefault("voice", {})["pitch"] = kwargs["pitch"]
+    if kwargs.get("voice_pitch") is not None:
+        uc.setdefault("project", {})["voice_pitch"] = kwargs["voice_pitch"]
         changed = True
 
     if changed:

@@ -20,13 +20,10 @@ DEFAULT_USER_CONFIG = {
         "resolution": "1080x1920",
         "output_dir": "./output",
         "max_chars": 10,
-    },
-    "voice": {
-        "engine": "edge-tts",
         "voice": "zh-CN-XiaoxiaoNeural",
-        "rate": "+0%",
-        "volume": "+0%",
-        "pitch": "+0Hz",
+        "voice_rate": "+0%",
+        "voice_volume": "+0%",
+        "voice_pitch": "+0Hz",
     },
 }
 
@@ -71,6 +68,4 @@ def _merge_defaults(user_config: dict) -> dict:
     merged = copy.deepcopy(DEFAULT_USER_CONFIG)
     if "project" in user_config:
         merged["project"].update(user_config["project"])
-    if "voice" in user_config:
-        merged["voice"].update(user_config["voice"])
     return merged

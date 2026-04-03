@@ -1,6 +1,16 @@
 """时间线计算模块 - 根据字幕和音频计算精确的时间线"""
 
+import re
 from dataclasses import dataclass, field
+
+
+def count_chars(text: str) -> int:
+    """计算文本中的字符数（中文按字，英文按单词）"""
+    # 匹配中文字符、英文单词、数字
+    chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+    english_words = len(re.findall(r'[a-zA-Z]+', text))
+    numbers = len(re.findall(r'\d+', text))
+    return chinese_chars + english_words + numbers
 
 
 @dataclass
@@ -83,18 +93,42 @@ def build_timeline(
         segment_start = current_time
         audio_paths = []
 
-        for sub in subs:
-            audio_path, duration = audio_info[sub.id]
-            sub_segment = SubtitleSegment(
-                id=sub.id,
-                text=sub.text,
-                start=segment_start,
-                end=segment_start + duration,
-                audio_path=str(audio_path),
-            )
-            subtitle_segments.append(sub_segment)
+        # 如果图片有完整文本，按字数比例分配语音时长
+        if img.text:
+            audio_path, total_duration = audio_info[img.id]
             audio_paths.append(str(audio_path))
-            segment_start += duration
+
+            total_chars = sum(count_chars(sub.text) for sub in subs)
+
+            cumulative_time = segment_start
+            for sub in subs:
+                char_count = count_chars(sub.text)
+                sub_duration = (char_count / total_chars) * total_duration
+                sub_segment = SubtitleSegment(
+                    id=sub.id,
+                    text=sub.text,
+                    start=cumulative_time,
+                    end=cumulative_time + sub_duration,
+                    audio_path=str(audio_path),
+                )
+                subtitle_segments.append(sub_segment)
+                cumulative_time += sub_duration
+
+            segment_start = cumulative_time
+        else:
+            # 没有完整文本，每条字幕独立生成语音
+            for sub in subs:
+                audio_path, duration = audio_info[sub.id]
+                sub_segment = SubtitleSegment(
+                    id=sub.id,
+                    text=sub.text,
+                    start=segment_start,
+                    end=segment_start + duration,
+                    audio_path=str(audio_path),
+                )
+                subtitle_segments.append(sub_segment)
+                audio_paths.append(str(audio_path))
+                segment_start += duration
 
         image_duration = segment_start - current_time
 

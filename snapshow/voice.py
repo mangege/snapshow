@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+import random
 import subprocess
+import time
 from pathlib import Path
 
 import edge_tts
@@ -70,31 +72,30 @@ async def get_audio_duration(audio_path: Path) -> float:
 
 
 def generate_voices(
-    subtitles: list,
+    images: list,
     output_dir: Path,
     title: str = "",
-    title_voice: VoiceConfig | None = None,
+    voice: str = "zh-CN-XiaoxiaoNeural",
+    rate: str = "+0%",
+    volume: str = "+0%",
+    pitch: str = "+0Hz",
 ) -> dict[str, tuple[Path, float]]:
     """
     批量生成语音文件
 
     Args:
-        subtitles: SubtitleConfig 列表
+        images: ImageConfig 列表，包含每张图的完整文本
         output_dir: 音频输出目录
         title: 标题文本，如不为空则生成 __title__ 音频
-        title_voice: 标题语音配置，默认使用第一条字幕的语音
+        voice: 语音名称
+        rate: 语速
+        volume: 音量
+        pitch: 音调
 
     Returns:
-        {subtitle_id: (audio_path, duration)}
+        {image_id: (audio_path, duration)}，标题为 "__title__"
     """
-    from .config import VoiceConfig
-
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    if title_voice is None and subtitles:
-        title_voice = subtitles[0].voice
-    elif title_voice is None:
-        title_voice = VoiceConfig()
 
     async def _generate_all():
         tasks = []
@@ -105,29 +106,37 @@ def generate_voices(
             task = generate_voice_async(
                 text=title,
                 output_path=audio_path,
-                voice=title_voice.voice,
-                rate=title_voice.rate,
-                volume=title_voice.volume,
-                pitch=title_voice.pitch,
+                voice=voice,
+                rate=rate,
+                volume=volume,
+                pitch=pitch,
             )
             tasks.append(("__title__", task))
 
-        for i, sub in enumerate(subtitles):
-            audio_path = output_dir / f"{sub.id}.mp3"
-            task = generate_voice_async(
-                text=sub.text,
-                output_path=audio_path,
-                voice=sub.voice.voice,
-                rate=sub.voice.rate,
-                volume=sub.voice.volume,
-                pitch=sub.voice.pitch,
-            )
-            tasks.append((sub.id, task))
+        # 按图片生成语音（每张图只生成一个语音文件）
+        for img in images:
+            if img.text:
+                audio_path = output_dir / f"{img.id}_voice.mp3"
+                task = generate_voice_async(
+                    text=img.text,
+                    output_path=audio_path,
+                    voice=voice,
+                    rate=rate,
+                    volume=volume,
+                    pitch=pitch,
+                )
+                tasks.append((img.id, task))
 
-        for sub_id, task in tasks:
+        for item_id, task in tasks:
             duration = await task
-            audio_path = output_dir / f"{sub_id}.mp3"
-            results[sub_id] = (audio_path, duration)
+            if item_id == "__title__":
+                audio_path = output_dir / "__title__.mp3"
+            else:
+                audio_path = output_dir / f"{item_id}_voice.mp3"
+            results[item_id] = (audio_path, duration)
+            # 每次调用后随机等待 1~3 秒，避免 edge-tts 频率限制
+            sleep_time = random.uniform(1, 3)
+            await asyncio.sleep(sleep_time)
 
         return results
 

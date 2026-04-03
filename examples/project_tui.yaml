@@ -7,15 +7,20 @@ project:
   account_name: 笑话小华
   account_id: jokerxiaohua
   max_chars: 10
+  voice: zh-CN-XiaoxiaoNeural
 images:
 - id: a1
   path: /home/outman/playspace/snapshow/examples/images/a1.jpg
+  text: 风急天高猿啸哀，渚清沙白鸟飞回
 - id: a2
   path: /home/outman/playspace/snapshow/examples/images/a2.jpg
+  text: 无边落木萧萧下，不尽长江滚滚来
 - id: a3
   path: /home/outman/playspace/snapshow/examples/images/a3.jpg
+  text: 万里悲秋常作客，百年多病独登台
 - id: a4
   path: /home/outman/playspace/snapshow/examples/images/a4.jpg
+  text: 艰难苦恨繁霜鬓，潦倒新停浊酒杯
 subtitles:
 - id: sub_001
   text: 风急天高猿啸哀

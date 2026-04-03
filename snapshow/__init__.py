@@ -3,7 +3,6 @@ from snapshow.config import (
     ProjectConfig,
     SubtitleConfig,
     SubtitleStyle,
-    VoiceConfig,
     load_config,
     validate_config,
 )
@@ -16,7 +15,6 @@ __all__ = [
     "ProjectConfig",
     "SubtitleConfig",
     "ImageConfig",
-    "VoiceConfig",
     "SubtitleStyle",
     "load_config",
     "validate_config",

@@ -753,7 +753,29 @@ class SubtitleTUI(App):
             title = project.get("title", "")
             account_name = project.get("account_name", uc_project.get("account_name", ""))
             account_id = project.get("account_id", uc_project.get("account_id", ""))
-            resolution = project.get("resolution", uc_project.get("resolution", "1080x1920"))
+            resolution = project.get("resolution")
+            if not resolution:
+                w = project.get("width")
+                h = project.get("height")
+                if w and h:
+                    for label, (rw, rh) in RESOLUTION_PRESETS:
+                        if rw == w and rh == h:
+                            resolution = f"{rw}x{rh}"
+                            break
+                    if not resolution:
+                        resolution = f"{w}x{h}"
+                else:
+                    uc_w = uc_project.get("width")
+                    uc_h = uc_project.get("height")
+                    if uc_w and uc_h:
+                        for label, (rw, rh) in RESOLUTION_PRESETS:
+                            if rw == uc_w and rh == uc_h:
+                                resolution = f"{rw}x{rh}"
+                                break
+                        if not resolution:
+                            resolution = f"{uc_w}x{uc_h}"
+                    else:
+                        resolution = uc_project.get("resolution", "1080x1920")
 
             self.query_one("#project_title_input", Input).value = title
             self.query_one("#project_account_name_input", Input).value = account_name
@@ -761,30 +783,40 @@ class SubtitleTUI(App):
             self.query_one("#project_resolution_select", Select).value = resolution
             self.max_chars = project.get("max_chars", uc_project.get("max_chars", 10))
             self.query_one("#char_limit", Input).value = str(self.max_chars)
-            self.max_chars = project.get("max_chars", uc_project.get("max_chars", 10))
-            self.query_one("#char_limit", Input).value = str(self.max_chars)
 
-            subtitles = config.get("subtitles", [])
-            if subtitles and "voice" in subtitles[0]:
-                voice = subtitles[0]["voice"].get("voice", uc_voice.get("voice", "zh-CN-XiaoxiaoNeural"))
-            else:
-                voice = uc_voice.get("voice", "zh-CN-XiaoxiaoNeural")
+            voice = project.get("voice", uc_project.get("voice", "zh-CN-XiaoxiaoNeural"))
             self.query_one("#project_voice_select", Select).value = voice
 
             img_id_to_path = {img["id"]: img["path"] for img in config.get("images", [])}
 
+            # 优先使用 images[].text 作为完整文本
+            for img in config.get("images", []):
+                img_id = img.get("id")
+                img_path = img.get("path")
+                img_text = img.get("text")
+                if img_id and img_path:
+                    path = str(Path(img_path).resolve())
+                    if img_text:
+                        self.image_data[path] = img_text
+                    elif path not in self.image_data:
+                        self.image_data[path] = ""
+
+            # 如果没有 images[].text，从 subtitles 拼接
             temp_image_text = {}
             for sub in config.get("subtitles", []):
                 img_id = sub.get("image")
                 if img_id in img_id_to_path:
                     path = str(Path(img_id_to_path[img_id]).resolve())
-                    text = sub.get("text", "")
-                    if path not in temp_image_text:
-                        temp_image_text[path] = []
-                    temp_image_text[path].append(text)
+                    if path not in self.image_data:
+                        text = sub.get("text", "")
+                        if text:
+                            if path not in temp_image_text:
+                                temp_image_text[path] = []
+                            temp_image_text[path].append(text)
 
             for path, text_list in temp_image_text.items():
-                self.image_data[path] = "，".join(text_list)
+                if path not in self.image_data:
+                    self.image_data[path] = "，".join(text_list)
 
             self.notify(f"已从 {config_path} 加载现有配置")
         except Exception as e:
@@ -886,7 +918,7 @@ class SubtitleTUI(App):
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         path = event.path
         if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-            self.current_image = str(path)
+            self.current_image = str(path.resolve())
             self.img_info.update(f"已选中: [bold $primary]{path.name}[/]")
             self.text_area.text = self.image_data.get(self.current_image, "")
             self.refresh_preview()
@@ -970,6 +1002,7 @@ class SubtitleTUI(App):
                 "account_name": account_name,
                 "account_id": account_id,
                 "max_chars": self.max_chars,
+                "voice": voice,
             },
             "images": [],
             "subtitles": [],
@@ -981,7 +1014,7 @@ class SubtitleTUI(App):
                 continue
 
             img_id = Path(img_path).stem
-            config_dict["images"].append({"id": img_id, "path": img_path})
+            config_dict["images"].append({"id": img_id, "path": img_path, "text": text})
 
             segments = self.split_text(text, self.max_chars)
             for seg in segments:
@@ -1042,7 +1075,7 @@ class SubtitleTUI(App):
             with temp_work_dir() as audio_parent:
                 audio_dir = audio_parent / "audio"
                 audio_dir.mkdir()
-                audio_info = generate_voices(config.subtitles, audio_dir, title=config.title)
+                audio_info = generate_voices(config.images, audio_dir, title=config.title, voice=config.voice, rate=config.voice_rate, volume=config.voice_volume, pitch=config.voice_pitch)
 
                 timeline = build_timeline(
                     config.images,

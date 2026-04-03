@@ -10,20 +10,10 @@ from .user_config import load_user_config
 
 
 @dataclass
-class VoiceConfig:
-    engine: str = "edge-tts"
-    voice: str = "zh-CN-XiaoxiaoNeural"
-    rate: str = "+0%"
-    volume: str = "+0%"
-    pitch: str = "+0Hz"
-
-
-@dataclass
 class SubtitleConfig:
     id: str
     text: str
     image: str
-    voice: VoiceConfig = field(default_factory=VoiceConfig)
 
 
 @dataclass
@@ -31,11 +21,12 @@ class ImageConfig:
     id: str
     path: str
     duration: Optional[float] = None
+    text: Optional[str] = None  # 完整字幕文本，用于生成语音
 
 
 @dataclass
 class SubtitleStyle:
-    font: str = ""  # 空字符串时自动检测中文字体
+    font: str = ""
     font_size: int = 64
     font_color: str = "white"
     border_color: str = "black"
@@ -55,12 +46,15 @@ class ProjectConfig:
     style: SubtitleStyle = field(default_factory=SubtitleStyle)
     transition_duration: float = 0.5
     output_dir: str = "./output"
-    title: str = ""  # 视频标题，开头显示
-    account_name: str = ""  # 用户名，结尾显示
-    account_id: str = ""  # 账号ID，结尾显示时加 @
-    powered_by: bool = True  # 是否在结尾显示 "Powered by snapshow"
-    max_chars: int = 10  # 每屏字数
-    max_chars: int = 10  # 每屏字数
+    title: str = ""
+    account_name: str = ""
+    account_id: str = ""
+    powered_by: bool = True
+    max_chars: int = 10
+    voice: str = "zh-CN-XiaoxiaoNeural"
+    voice_rate: str = "+0%"
+    voice_volume: str = "+0%"
+    voice_pitch: str = "+0Hz"
 
 
 def load_config(config_path: str | Path, use_user_config_fallback: bool = True) -> ProjectConfig:
@@ -88,38 +82,27 @@ def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
     style_raw = raw.get("style", {})
 
     uc_project = {}
-    uc_voice = {}
     if user_config:
         uc_project = user_config.get("project", {})
-        uc_voice = user_config.get("voice", {})
 
     images = [
         ImageConfig(
             id=img["id"],
             path=img["path"],
             duration=img.get("duration"),
+            text=img.get("text"),
         )
         for img in images_raw
     ]
 
-    subtitles = []
-    for sub in subtitles_raw:
-        voice_raw = sub.get("voice", {})
-        voice = VoiceConfig(
-            engine=voice_raw.get("engine", uc_voice.get("engine", "edge-tts")),
-            voice=voice_raw.get("voice", uc_voice.get("voice", "zh-CN-XiaoxiaoNeural")),
-            rate=voice_raw.get("rate", uc_voice.get("rate", "+0%")),
-            volume=voice_raw.get("volume", uc_voice.get("volume", "+0%")),
-            pitch=voice_raw.get("pitch", uc_voice.get("pitch", "+0Hz")),
+    subtitles = [
+        SubtitleConfig(
+            id=sub["id"],
+            text=sub["text"],
+            image=sub["image"],
         )
-        subtitles.append(
-            SubtitleConfig(
-                id=sub["id"],
-                text=sub["text"],
-                image=sub["image"],
-                voice=voice,
-            )
-        )
+        for sub in subtitles_raw
+    ]
 
     style = SubtitleStyle(
         font=style_raw.get("font", ""),
@@ -131,11 +114,23 @@ def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
         margin_bottom=style_raw.get("margin_bottom", 200),
     )
 
+    # 处理分辨率：优先用 width/height，其次用 resolution 字符串
+    width = project.get("width")
+    height = project.get("height")
+    if width is None or height is None:
+        uc_width = uc_project.get("width")
+        uc_height = uc_project.get("height")
+        if uc_width is not None and uc_height is not None:
+            width, height = uc_width, uc_height
+        else:
+            res = project.get("resolution") or uc_project.get("resolution", "1080x1920")
+            width, height = map(int, res.split("x"))
+
     return ProjectConfig(
         name=project.get("name", uc_project.get("name", "output")),
         fps=project.get("fps", uc_project.get("fps", 30)),
-        width=project.get("width", uc_project.get("width", 1080)),
-        height=project.get("height", uc_project.get("height", 1920)),
+        width=width,
+        height=height,
         images=images,
         subtitles=subtitles,
         style=style,
@@ -146,6 +141,10 @@ def _parse_config(raw: dict, user_config: dict | None = None) -> ProjectConfig:
         account_id=project.get("account_id", uc_project.get("account_id", "")),
         powered_by=project.get("powered_by", uc_project.get("powered_by", True)),
         max_chars=project.get("max_chars", uc_project.get("max_chars", 10)),
+        voice=project.get("voice", uc_project.get("voice", "zh-CN-XiaoxiaoNeural")),
+        voice_rate=project.get("voice_rate", uc_project.get("voice_rate", "+0%")),
+        voice_volume=project.get("voice_volume", uc_project.get("voice_volume", "+0%")),
+        voice_pitch=project.get("voice_pitch", uc_project.get("voice_pitch", "+0Hz")),
     )
 
 

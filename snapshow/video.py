@@ -104,6 +104,51 @@ def _escape_text(text: str) -> str:
     return text
 
 
+@lru_cache(maxsize=1)
+def _detect_gpu_encoder() -> str | None:
+    """检测可用的 GPU 编码器
+    按优先级检测：nvidia -> qsv -> vaapi -> amd -> none
+    返回编码器名称或 None（使用 CPU）
+    """
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return None
+
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+
+        encoders = result.stdout
+
+        if "h264_nvenc" in encoders:
+            logger.info("GPU encoder detected: h264_nvenc")
+            return "h264_nvenc"
+        if "h264_qsv" in encoders:
+            logger.info("GPU encoder detected: h264_qsv")
+            return "h264_qsv"
+        if "h264_vaapi" in encoders:
+            logger.info("GPU encoder detected: h264_vaapi")
+            return "h264_vaapi"
+        if "h264_amf" in encoders:
+            logger.info("GPU encoder detected: h264_amf")
+            return "h264_amf"
+        if "h264_videotoolbox" in encoders:
+            logger.info("GPU encoder detected: h264_videotoolbox")
+            return "h264_videotoolbox"
+
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    logger.info("No GPU encoder detected, using CPU encoding")
+    return None
+
+
 def create_image_segment_video(
     segment: ImageSegment,
     style: SubtitleStyle,
@@ -148,7 +193,7 @@ def create_image_segment_video(
 
     def _make_drawtext(
         text: str,
-        fontsize: int,
+        fontsize: float,
         fontcolor: str = "white",
         border: bool = False,
         x: str = "(w-tw)/2",
@@ -236,8 +281,15 @@ def merge_videos_with_xfade(
         return
 
     # 获取每个片段的时长
-    durations = []
     ffprobe = find_ffprobe()
+    if not ffprobe:
+        raise RuntimeError("ffprobe not found")
+
+    ffprobe = find_ffprobe()
+    if not ffprobe:
+        raise RuntimeError("ffprobe not found")
+
+    durations = []
     for p in video_paths:
         res = subprocess.run(
             [
@@ -253,6 +305,8 @@ def merge_videos_with_xfade(
             capture_output=True,
             text=True,
         )
+        if res.returncode != 0:
+            raise RuntimeError(f"Failed to get duration for {p}: {res.stderr}")
         durations.append(float(res.stdout.strip()))
 
     gpu_encoder = _detect_gpu_encoder()
@@ -304,17 +358,23 @@ def merge_videos_with_xfade(
 
 
 def merge_audio_ffmpeg(audio_paths: list[Path], output_path: Path) -> None:
-    """使用 ffmpeg concat 合并音频"""
-    list_file = output_path.parent / "audio_list.txt"
-    with open(list_file, "w") as f:
-        for p in audio_paths:
-            f.write(f"file '{p.absolute()}'\n")
+    """使用 ffmpeg concat 滤镜无缝合并音频"""
+    if len(audio_paths) == 1:
+        shutil.copy2(audio_paths[0], output_path)
+        return
 
     ffmpeg = find_ffmpeg()
-    _run_ffmpeg(
-        [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(output_path)],
-        "合并音频",
-    )
+    inputs = []
+    for p in audio_paths:
+        inputs.extend(["-i", str(p)])
+
+    filter_parts = []
+    for i in range(len(audio_paths)):
+        filter_parts.append(f"[{i}:a]")
+    filter_str = "".join(filter_parts) + f"concat=n={len(audio_paths)}:v=0:a=1[aout]"
+
+    cmd = [ffmpeg, "-y"] + inputs + ["-filter_complex", filter_str, "-map", "[aout]", str(output_path)]
+    _run_ffmpeg(cmd, "合并音频")
 
 
 def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir: Path, base_dir: Path) -> Path:
@@ -337,8 +397,13 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
         create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir)
         video_paths.append(clip_path)
 
+        # 去重：同一张图片的多个字幕段共享同一个音频文件，只添加一次
+        seen_audio = set()
         for sub in segment.subtitles:
-            all_audio_paths.append(Path(sub.audio_path))
+            if sub.audio_path not in seen_audio:
+                all_audio_paths.append(Path(sub.audio_path))
+                seen_audio.add(sub.audio_path)
+                seen_audio.add(sub.audio_path)
 
     # 1. 合并视频流
     video_only = work_dir / "video_only.mp4"
