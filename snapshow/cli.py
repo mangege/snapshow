@@ -1,7 +1,6 @@
 """CLI 入口 - 命令行界面"""
 
 import logging
-import tempfile
 from pathlib import Path
 
 import click
@@ -59,50 +58,45 @@ def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool)
     logger.info(f"字幕数量: {len(config.subtitles)}")
 
     logger.info("生成配音...")
-    audio_dir = Path(tempfile.mkdtemp()) / "audio"
-    audio_info = generate_voices(config.subtitles, audio_dir)
+    from snapshow.utils import temp_work_dir
 
-    # 生成标题语音
-    if config.title:
-        import asyncio
+    with temp_work_dir() as audio_parent:
+        audio_dir = audio_parent / "audio"
+        audio_info = generate_voices(config.subtitles, audio_dir)
 
-        from .voice import generate_voice_async
+        # 生成标题语音
+        if config.title:
+            import asyncio
 
-        title_audio_path = audio_dir / "__title__.mp3"
-        duration = asyncio.run(
-            generate_voice_async(text=config.title, output_path=title_audio_path, voice="zh-CN-XiaoxiaoNeural")
+            from .voice import generate_voice_async
+
+            title_audio_path = audio_dir / "__title__.mp3"
+            duration = asyncio.run(
+                generate_voice_async(text=config.title, output_path=title_audio_path, voice="zh-CN-XiaoxiaoNeural")
+            )
+            audio_info["__title__"] = (title_audio_path, duration)
+
+        logger.info(f"配音生成完成，共 {len(audio_info)} 条")
+
+        logger.info("计算时间线...")
+        timeline = build_timeline(
+            config.images,
+            config.subtitles,
+            audio_info,
+            config.transition_duration,
+            title=config.title,
+            logo=config.logo,
         )
-        audio_info["__title__"] = (title_audio_path, duration)
+        print_timeline(timeline)
 
-    logger.info(f"配音生成完成，共 {len(audio_info)} 条")
+        if dry_run:
+            logger.info("Dry run 模式，跳过视频生成")
+            return
 
-    logger.info("计算时间线...")
-    timeline = build_timeline(
-        config.images, config.subtitles, audio_info, config.transition_duration, title=config.title, logo=config.logo
-    )
-    print_timeline(timeline)
-
-    if dry_run:
-        logger.info("Dry run 模式，跳过视频生成")
-        return
-
-    logger.info("开始生成视频...")
-    work_dir = Path(tempfile.mkdtemp()) / "snapshow_work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-
-    # 将音频拷贝到工作目录
-    final_audio_dir = work_dir / "audio"
-    final_audio_dir.mkdir(parents=True, exist_ok=True)
-    for sub_id, (path, duration) in audio_info.items():
-        import shutil
-
-        new_path = final_audio_dir / path.name
-        shutil.copy2(path, new_path)
-        audio_info[sub_id] = (new_path, duration)
-
-    output_path = generate_video(config, timeline, work_dir, base_dir)
-
-    logger.info(f"视频生成成功: {output_path}")
+        logger.info("开始生成视频...")
+        with temp_work_dir() as work_dir:
+            output_path = generate_video(config, timeline, work_dir, base_dir)
+            logger.info(f"视频生成成功: {output_path}")
 
 
 @main.command()
@@ -113,7 +107,7 @@ def preview(config_path: str):
     config = load_config(config_path)
 
     print("\n=== 配置预览 ===")
-    print(f"(已合并用户级配置)")
+    print("(已合并用户级配置)")
     print(f"项目名称: {config.name}")
     print(f"分辨率: {config.width}x{config.height}")
     print(f"帧率: {config.fps}")
@@ -176,13 +170,13 @@ def config_show():
     print(f"配置文件: {USER_CONFIG_PATH}")
     project = uc.get("project", {})
     voice = uc.get("voice", {})
-    print(f"\n[项目默认]")
+    print("\n[项目默认]")
     print(f"  Logo:       {project.get('logo', '(未设置)')}")
     print(f"  片尾署名:   {project.get('powered_by', True)}")
     print(f"  FPS:        {project.get('fps', 30)}")
     print(f"  分辨率:     {project.get('width', 1080)}x{project.get('height', 1920)}")
     print(f"  输出目录:   {project.get('output_dir', './output')}")
-    print(f"\n[声音默认]")
+    print("\n[声音默认]")
     print(f"  声音:       {voice.get('voice', 'zh-CN-XiaoxiaoNeural')}")
     print(f"  语速:       {voice.get('rate', '+0%')}")
     print(f"  音量:       {voice.get('volume', '+0%')}")
