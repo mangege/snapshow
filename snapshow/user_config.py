@@ -1,5 +1,6 @@
 """用户级配置管理 - 存储在 ~/.config/snapshow/config.yaml (XDG 规范)"""
 
+import copy
 import os
 from pathlib import Path
 
@@ -66,7 +67,7 @@ def init_user_config(overwrite: bool = False) -> bool:
 
 def _merge_defaults(user_config: dict) -> dict:
     """将用户配置与默认配置合并，确保所有必需字段存在"""
-    merged = DEFAULT_USER_CONFIG.copy()
+    merged = copy.deepcopy(DEFAULT_USER_CONFIG)
     if "project" in user_config:
         merged["project"].update(user_config["project"])
     if "voice" in user_config:
