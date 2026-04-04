@@ -677,6 +677,7 @@ class SubtitleTUI(App):
         Binding("ctrl+g", "generate", "生成", show=True),
         Binding("ctrl+r", "preview_config", "预览配置", show=True),
         Binding("ctrl+e", "focus_editor", "编辑器", show=True),
+        Binding("ctrl+p", "focus_preview", "预览", show=True),
         Binding("ctrl+i", "focus_sidebar", "文件树", show=True),
         Binding("ctrl+z", "undo", "撤销", show=True),
         Binding("ctrl+t", "toggle_theme", "主题", show=True),
@@ -915,6 +916,12 @@ class SubtitleTUI(App):
 
         yield Footer()
 
+    def action_focus_editor(self):
+        self.text_area.focus()
+
+    def action_focus_preview(self):
+        self.query_one("#preview_list").focus()
+
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         path = event.path
         if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
@@ -935,13 +942,26 @@ class SubtitleTUI(App):
 
     def refresh_preview(self):
         self.preview_list.clear()
-        text = self.text_area.text.strip()
-        if not text:
+        if not self.current_image:
             return
 
-        segments = self.split_text(text, self.max_chars)
+        # 计算全局起始偏移量 (估算之前所有图片的总时长)
+        global_offset = 0.0
+        for img_path, text in self.image_data.items():
+            if img_path == self.current_image:
+                break
+            if not text.strip():
+                continue
+            prev_segments = self.split_text(text, self.max_chars)
+            for ps in prev_segments:
+                global_offset += len(ps) * 0.25 + 0.5
 
-        current_time = 0.0
+        current_text = self.text_area.text.strip()
+        if not current_text:
+            return
+
+        segments = self.split_text(current_text, self.max_chars)
+        current_time = global_offset
         for i, seg in enumerate(segments):
             est_duration = len(seg) * 0.25 + 0.5
             start_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
@@ -997,12 +1017,14 @@ class SubtitleTUI(App):
                 "name": "tui_project",
                 "width": width,
                 "height": height,
+                "fps": 30,
                 "output_dir": "./output",
                 "title": title,
                 "account_name": account_name,
                 "account_id": account_id,
                 "max_chars": self.max_chars,
                 "voice": voice,
+                "transition_duration": 0.5,
             },
             "images": [],
             "subtitles": [],
@@ -1023,7 +1045,6 @@ class SubtitleTUI(App):
                         "id": f"sub_{sub_count:03d}",
                         "text": seg,
                         "image": img_id,
-                        "voice": {"voice": voice},
                     }
                 )
                 sub_count += 1
@@ -1093,7 +1114,9 @@ class SubtitleTUI(App):
             log_screen.app.call_from_thread(log_screen.set_finished, True, str(output_path))
 
         except Exception as e:
-            log_screen.app.call_from_thread(log_screen.set_finished, False, str(e))
+            msg = str(e)
+            log_screen.app.call_from_thread(log_screen.set_finished, False, msg)
+            self.app.call_from_thread(self.notify, f"生成失败: {msg}", severity="error")
         finally:
             root_logger.removeHandler(ui_handler)
             for name in ["snapshow.video", "snapshow.voice", "snapshow"]:

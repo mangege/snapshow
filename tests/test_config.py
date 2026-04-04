@@ -34,26 +34,19 @@ class TestLoadConfig:
 
     def test_load_config_with_voice(self, tmp_path):
         config_data = {
-            "project": {"name": "test"},
+            "project": {
+                "name": "test",
+                "voice": "zh-CN-YunxiNeural",
+                "voice_rate": "+10%"
+            },
             "images": [{"id": "img1", "path": "test.jpg"}],
-            "subtitles": [
-                {
-                    "id": "sub1",
-                    "text": "hello",
-                    "image": "img1",
-                    "voice": {
-                        "engine": "edge-tts",
-                        "voice": "zh-CN-XiaoxiaoNeural",
-                        "rate": "+10%",
-                    },
-                }
-            ],
+            "subtitles": [{"id": "sub1", "text": "hello", "image": "img1"}],
         }
         config_file = create_temp_config(config_data, tmp_path)
         config = load_config(config_file)
 
-        assert config.subtitles[0].voice.voice == "zh-CN-XiaoxiaoNeural"
-        assert config.subtitles[0].voice.rate == "+10%"
+        assert config.voice == "zh-CN-YunxiNeural"
+        assert config.voice_rate == "+10%"
 
     def test_load_config_with_style(self, tmp_path):
         config_data = {
@@ -158,6 +151,10 @@ class TestConfigEdgeCases:
 
 def test_public_api_exports():
     from snapshow import (
+        ProjectConfig,
+        SubtitleConfig,
+        ImageConfig,
+        SubtitleStyle,
         build_timeline,
         find_ffmpeg,
         find_ffprobe,

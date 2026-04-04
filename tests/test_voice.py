@@ -1,6 +1,7 @@
 """测试语音生成模块"""
 
 import asyncio
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,50 +10,50 @@ import pytest
 
 class TestGetAudioDuration:
     @patch("snapshow.voice.find_ffprobe")
-    def test_uses_find_ffprobe(self, mock_find_ffprobe):
-        """Verify get_audio_duration uses find_ffprobe() not hardcoded string"""
-        mock_find_ffprobe.return_value = "/usr/bin/ffprobe"
+    @pytest.mark.asyncio
+    async def test_uses_find_ffprobe(self, mock_find):
+        """验证使用 find_ffprobe() 而非硬编码字符串"""
+        from snapshow.voice import get_audio_duration
 
+        mock_find.return_value = "/usr/local/bin/ffprobe"
+        with patch("snapshow.voice.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="2.5\n", returncode=0)
+            await get_audio_duration(Path("dummy.mp3"))
+            args = mock_run.call_args[0][0]
+            assert args[0] == "/usr/local/bin/ffprobe"
+
+    @pytest.mark.asyncio
+    async def test_returns_float(self):
+        """验证返回浮点数时长"""
         from snapshow.voice import get_audio_duration
 
         with patch("snapshow.voice.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout="1.234\n", returncode=0)
-            result = asyncio.run(get_audio_duration(Path("test.mp3")))
-
-            call_args = mock_run.call_args[0][0]
-            assert call_args[0] == "/usr/bin/ffprobe"
-            assert result == 1.234
-
-    def test_returns_float(self):
-        """Should return a float duration"""
-        from snapshow.voice import get_audio_duration
-
-        try:
-            result = asyncio.run(get_audio_duration(Path("/dev/null")))
-            assert isinstance(result, float)
-        except Exception:
-            pytest.skip("ffprobe not available or invalid audio")
+            mock_run.return_value = MagicMock(stdout="10.5\n", returncode=0)
+            duration = await get_audio_duration(Path("dummy.mp3"))
+            assert isinstance(duration, float)
+            assert duration == 10.5
 
 
 class TestGenerateVoices:
-    def test_generate_voices_returns_dict(self, tmp_path):
-        """Test generate_voices returns correct structure with mocked edge-tts"""
-        from snapshow.config import SubtitleConfig, VoiceConfig
+    @patch("snapshow.voice.generate_voice_async")
+    def test_generate_voices_returns_dict(self, mock_gen, tmp_path):
+        """测试批量生成语音返回字典"""
+        from snapshow.config import ImageConfig
         from snapshow.voice import generate_voices
 
-        subtitles = [
-            SubtitleConfig(id="sub1", text="hello", image="img1", voice=VoiceConfig()),
-        ]
-        audio_dir = tmp_path / "audio"
-        audio_dir.mkdir()
-
-        # Mock the async voice generation
-        async def fake_generate(*args, **kwargs):
+        # generate_voice_async 是异步的，mock 需要返回 coroutine 或使用 AsyncMock
+        async def mock_async_gen(*args, **kwargs):
             return 2.0
+        mock_gen.side_effect = mock_async_gen
 
-        with patch("snapshow.voice.generate_voice_async", new=fake_generate):
-            audio_info = generate_voices(subtitles, audio_dir)
-
-        assert "sub1" in audio_info
-        assert audio_info["sub1"][1] == 2.0
-        assert audio_info["sub1"][0] == audio_dir / "sub1.mp3"
+        images = [
+            ImageConfig(id="img1", path="img1.jpg", text="hello"),
+        ]
+        audio_dir = tmp_path
+        
+        # generate_voices 是同步函数
+        result = generate_voices(images, audio_dir, voice="zh-CN-XiaoxiaoNeural")
+        
+        assert "img1" in result
+        assert result["img1"][1] == 2.0
+        assert result["img1"][0].name == "img1_voice.mp3"

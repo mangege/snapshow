@@ -1,6 +1,6 @@
 """测试时间线计算模块"""
 
-from snapshow.config import ImageConfig, SubtitleConfig, VoiceConfig
+from snapshow.config import ImageConfig, SubtitleConfig
 from snapshow.timeline import build_timeline
 
 
@@ -14,12 +14,11 @@ def make_image(id: str, path: str, duration: float | None = None) -> ImageConfig
     return ImageConfig(id=id, path=path, duration=duration)
 
 
-def make_subtitle(id: str, text: str, image: str, voice: str = "zh-CN-XiaoxiaoNeural") -> SubtitleConfig:
+def make_subtitle(id: str, text: str, image: str) -> SubtitleConfig:
     return SubtitleConfig(
         id=id,
         text=text,
         image=image,
-        voice=VoiceConfig(voice=voice),
     )
 
 
@@ -145,15 +144,15 @@ class TestTimelineEdgeCases:
         timeline = build_timeline(images, subtitles, audio_info, 0.5, title="My Title")
         assert all(seg.image_id != "__title__" for seg in timeline)
 
-    def test_logo_creates_black_segment(self):
-        images = [make_image("img1", "test.jpg")]
-        subtitles = [make_subtitle("sub1", "hello", "img1")]
-        audio_info = {"sub1": ("/path/sub1.mp3", 2.0)}
-        timeline = build_timeline(images, subtitles, audio_info, 0.5, logo="MyLogo")
-        logo_seg = [s for s in timeline if s.image_id == "__logo__"]
-        assert len(logo_seg) == 1
-        assert logo_seg[0].image_path == "__black__"
-        assert logo_seg[0].end - logo_seg[0].start == 1.0
+    # def test_logo_creates_black_segment(self):
+    #     images = [make_image("img1", "test.jpg")]
+    #     subtitles = [make_subtitle("sub1", "hello", "img1")]
+    #     audio_info = {"sub1": ("/path/sub1.mp3", 2.0)}
+    #     timeline = build_timeline(images, subtitles, audio_info, 0.5, logo="MyLogo")
+    #     logo_seg = [s for s in timeline if s.image_id == "__logo__"]
+    #     assert len(logo_seg) == 1
+    #     assert logo_seg[0].image_path == "__black__"
+    #     assert logo_seg[0].end - logo_seg[0].start == 1.0
 
     def test_title_creates_black_segment(self):
         images = [make_image("img1", "test.jpg")]

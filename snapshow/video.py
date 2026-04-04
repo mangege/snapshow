@@ -386,6 +386,7 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
 
     video_paths = []
     all_audio_paths = []
+    seen_audio = set()
 
     for i, segment in enumerate(timeline):
         if i < len(timeline) - 1:
@@ -397,13 +398,12 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
         create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir)
         video_paths.append(clip_path)
 
-        # 去重：同一张图片的多个字幕段共享同一个音频文件，只添加一次
-        seen_audio = set()
-        for sub in segment.subtitles:
-            if sub.audio_path not in seen_audio:
-                all_audio_paths.append(Path(sub.audio_path))
-                seen_audio.add(sub.audio_path)
-                seen_audio.add(sub.audio_path)
+        # 收集音频路径并去重，保持顺序
+        for ap in segment.audio_paths:
+            p = Path(ap)
+            if p not in seen_audio:
+                all_audio_paths.append(p)
+                seen_audio.add(p)
 
     # 1. 合并视频流
     video_only = work_dir / "video_only.mp4"
