@@ -13,6 +13,8 @@ from .utils import find_ffprobe
 
 logger = logging.getLogger(__name__)
 
+MAX_RETRIES = 8  # 最大尝试次数
+
 
 async def generate_voice_async(
     text: str,
@@ -21,9 +23,10 @@ async def generate_voice_async(
     rate: str = "+0%",
     volume: str = "+0%",
     pitch: str = "+0Hz",
+    on_retry: callable = None,
 ) -> float:
     """
-    异步生成语音文件
+    异步生成语音文件 (带指数退避重试)
 
     Returns:
         音频时长（秒）
@@ -31,22 +34,49 @@ async def generate_voice_async(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 先删除旧文件（如果存在）
-    if output_path.exists():
-        output_path.unlink()
+    last_exception = None
 
-    communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
+    for attempt in range(MAX_RETRIES):
+        try:
+            # 每次尝试前清理旧文件
+            if output_path.exists():
+                output_path.unlink()
 
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            with open(output_path, "ab") as f:
-                f.write(chunk["data"])
-        elif chunk["type"] == "WordBoundary":
-            pass
+            communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
 
-    duration = await get_audio_duration(output_path)
-    logger.info(f"生成语音: {output_path.name}, 时长: {duration:.2f}s")
-    return duration
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    with open(output_path, "ab") as f:
+                        f.write(chunk["data"])
+
+            duration = await get_audio_duration(output_path)
+            if attempt > 0:
+                logger.info(f"语音生成重试成功: {output_path.name} (第 {attempt} 次重试)")
+            else:
+                logger.info(f"生成语音: {output_path.name}, 时长: {duration:.2f}s")
+            return duration
+
+        except Exception as e:
+            last_exception = e
+            if attempt < MAX_RETRIES - 1:
+                # 计算退避时间 (指数 + 随机扰动)
+                wait_time = (2**attempt) + random.random()
+                error_msg = f"{type(e).__name__}: {str(e)}"
+                logger.warning(
+                    f"语音生成失败 (尝试 {attempt + 1}/{MAX_RETRIES}): {error_msg}。 " f"{wait_time:.1f}s 后重试..."
+                )
+
+                if on_retry:
+                    try:
+                        on_retry(attempt + 1, error_msg, wait_time)
+                    except Exception:
+                        pass  # 回调异常不应中断重试逻辑
+
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"语音生成在 {MAX_RETRIES} 次尝试后最终失败: {str(e)}")
+
+    raise RuntimeError(f"语音生成最终失败 ({MAX_RETRIES} 次尝试): {str(last_exception)}")
 
 
 async def get_audio_duration(audio_path: Path) -> float:
@@ -79,9 +109,10 @@ def generate_voices(
     rate: str = "+0%",
     volume: str = "+0%",
     pitch: str = "+0Hz",
+    on_retry: callable = None,
 ) -> dict[str, tuple[Path, float]]:
     """
-    批量生成语音文件
+    批量生成语音文件 (支持重试回调)
 
     Args:
         images: ImageConfig 列表，包含每张图的完整文本
@@ -91,6 +122,7 @@ def generate_voices(
         rate: 语速
         volume: 音量
         pitch: 音调
+        on_retry: 重试时的回调函数 (attempt, error, wait)
 
     Returns:
         {image_id: (audio_path, duration)}，标题为 "__title__"
@@ -110,6 +142,7 @@ def generate_voices(
                 rate=rate,
                 volume=volume,
                 pitch=pitch,
+                on_retry=on_retry,
             )
             tasks.append(("__title__", task))
 
@@ -124,6 +157,7 @@ def generate_voices(
                     rate=rate,
                     volume=volume,
                     pitch=pitch,
+                    on_retry=on_retry,
                 )
                 tasks.append((img.id, task))
 

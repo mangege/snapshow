@@ -1084,7 +1084,27 @@ class SubtitleTUI(App):
             with temp_work_dir() as audio_parent:
                 audio_dir = audio_parent / "audio"
                 audio_dir.mkdir()
-                audio_info = generate_voices(config.images, audio_dir, title=config.title, voice=config.voice, rate=config.voice_rate, volume=config.voice_volume, pitch=config.voice_pitch)
+
+                from .voice import MAX_RETRIES
+
+                def on_voice_retry(attempt: int, error: str, wait: float):
+                    self.app.call_from_thread(
+                        self.notify,
+                        f"语音生成失败，正在进行第 {attempt}/{MAX_RETRIES - 1} 次重试 (等待 {wait:.1f}s)... \n错误: {error[:40]}",
+                        severity="warning",
+                        timeout=wait + 1,
+                    )
+
+                audio_info = generate_voices(
+                    config.images,
+                    audio_dir,
+                    title=config.title,
+                    voice=config.voice,
+                    rate=config.voice_rate,
+                    volume=config.voice_volume,
+                    pitch=config.voice_pitch,
+                    on_retry=on_voice_retry,
+                )
 
                 timeline = build_timeline(
                     config.images,
