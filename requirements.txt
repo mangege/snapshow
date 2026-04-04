@@ -3,3 +3,4 @@ edge-tts>=6.1.0
 click>=8.0
 pillow>=10.0
 textual>=0.50.0
+jieba>=0.42.1
