@@ -830,6 +830,7 @@ class SubtitleTUI(App):
                     self.image_data[path] = "，".join(text_list)
 
             self.notify(f"已从 {config_path} 加载现有配置")
+            self.refresh_preview()
         except Exception as e:
             self.notify(f"加载初始配置失败: {str(e)}", severity="warning")
 
@@ -984,7 +985,9 @@ class SubtitleTUI(App):
             self.preview_list.append(item)
 
     def split_text(self, text: str, max_len: int) -> list[str]:
-        return split_text_smart(text, max_len)
+        segments = split_text_smart(text, max_len)
+        self.notify(f"分屏逻辑已触发: {len(segments)} 段", timeout=1)
+        return segments
 
     def action_save(self):
         """保存当前编辑内容到 YAML 配置文件"""

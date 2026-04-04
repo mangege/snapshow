@@ -1,7 +1,5 @@
 """测试跨平台工具模块"""
 
-
-
 from snapshow.utils import find_ffmpeg, find_ffprobe, find_zh_font, temp_work_dir
 
 
@@ -40,7 +38,6 @@ class TestFindFfmpeg:
         """On Linux, should search common paths"""
         monkeypatch.setattr("snapshow.utils.platform.system", lambda: "Linux")
         result = find_ffmpeg()
-        # Should return either a found path or 'ffmpeg' fallback
         assert isinstance(result, str)
 
 
@@ -66,39 +63,48 @@ class TestFindZhFont:
 
 
 class TestSplitTextSmart:
-    def test_split_text_smart_basic(self):
+    def test_split_text_smart_punctuation_priority(self):
+        """验证标点强制分屏且输出不含常规标点"""
         from snapshow.utils import split_text_smart
-        text = "这是一个简单的测试句子。"
+        text = "好的，没问题！我这就去。"
         segments = split_text_smart(text, max_chars=10)
-        assert len(segments) == 2
-        assert segments[0] == "这是一个简单的测试"
-        assert segments[1] == "句子。"
+        # 即使字数很少，标点也强制分段
+        assert segments == ["好的", "没问题", "我这就去"]
+
+    def test_split_text_smart_keep_numeric_symbols(self):
+        """验证保留数值相关的符号和小数点"""
+        from snapshow.utils import split_text_smart
+        text = "当前进度是 98.5%，增长了 +5 左右。"
+        segments = split_text_smart(text, max_chars=20)
+        # 标点 "." 作为小数点应保留，"。" 作为句号应移除
+        assert "98.5%" in segments[0]
+        assert "+5" in segments[1]
+        assert "。" not in segments[1]
+        assert "." not in segments[1] # 句尾无点
+
+    def test_split_text_smart_emoji_preservation(self):
+        """验证表情符号被保留"""
+        from snapshow.utils import split_text_smart
+        text = "太棒了 😄！干得漂亮。"
+        segments = split_text_smart(text, max_chars=10)
+        assert "😄" in segments[0]
+        assert "太棒了" in segments[0]
+        assert "！" not in segments[0]
 
     def test_split_text_smart_balance(self):
-        """验证智能平衡：10+2 应调整为更均衡的 6+6 或类似"""
+        """验证在去标点后的长句依然执行智能平衡"""
         from snapshow.utils import split_text_smart
-        text = "我们正在研究人工智能实验室的先进技术"  # 18字
+        text = "我们正在研究人工智能实验室的先进技术" # 18字
         max_chars = 10
         segments = split_text_smart(text, max_chars)
-        # 如果不平衡可能是 [10, 8]，平衡后可能保持 [9, 9] 或 [10, 8] 取决于分词
         assert len(segments) == 2
         assert all(len(s) <= max_chars for s in segments)
-        # 验证两段长度差异不应过大
         assert abs(len(segments[0]) - len(segments[1])) <= 4
 
-    def test_split_text_smart_word_protection(self):
-        """验证词组保护：即使空间紧凑也不切断词组"""
+    def test_split_text_smart_long_word_fallback(self):
+        """验证超长词组的保护与被迫切分"""
         from snapshow.utils import split_text_smart
         text = "人工智能"
-        # 预期：限制为 3 时，不应切为 ["人工", "智能"]，而应整体推移
+        # 4字词组在3字限制下
         segments = split_text_smart(text, max_chars=3)
-        assert segments == ["人工智能"]  # 词组本身超限 4 > 3，被迫保留或按字符切
-
-    def test_split_text_smart_punctuation_sticking(self):
-        """验证标点避头：标点应粘附在前一个词末尾"""
-        from snapshow.utils import split_text_smart
-        text = "测试句子，非常棒。"
-        # 如果 "句子" 刚好在结尾，"，" 不应出现在下一行开头
-        segments = split_text_smart(text, max_chars=5)
-        # ["测试句子，", "非常棒。"]
-        assert "，" not in segments[1]
+        assert segments == ["人工智能"] # 允许小幅超限保护词组

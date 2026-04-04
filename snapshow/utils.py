@@ -1,5 +1,6 @@
 """跨平台工具模块 - 字体搜索、FFmpeg 路径解析"""
 
+import logging
 import os
 import platform
 import re
@@ -9,6 +10,8 @@ import tempfile
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def find_ffmpeg() -> str:
@@ -201,30 +204,44 @@ def temp_work_dir(prefix: str = "snapshow"):
 def split_text_smart(text: str, max_chars: int) -> list[str]:
     """
     智能分段算法：
-    1. 按强标点分割
-    2. 对长片段使用 jieba 分词
-    3. 贪婪合并并保护词组边界
-    4. 标点避头（粘附在前一个词末尾）
-    5. 末尾重平衡（Redistribution）
+    1. 标点优先强制分屏 (排除小数点)
+    2. 内容清洗：移除常规标点，保留数值符号和 Emoji
+    3. 长句兜底：使用 jieba 和平衡算法处理超长片段
     """
     import jieba
 
     if not text:
         return []
 
-    # 1. 强标点切分 (保留标点)
-    # 使用正则切分，保留分隔符
-    raw_parts = re.split(r"([\n。！？；])", text)
+    def clean_punctuation(t: str) -> str:
+        """清洗标点，保留数值相关符号和表情符号"""
+        # 移除常见中英文标点，但通过 lookaround 保护小数点
+        # 步骤：
+        # 1. 将所有点号暂时标记（如果是小数点）
+        # 2. 移除所有其他标点
+        # 3. 恢复小数点
+        
+        # 保护小数点：把数字中间的点替换为一个特殊占位符
+        t = re.sub(r"(\d)\.(\d)", r"\1__DOT__\2", t)
+        # 移除其余标点 (包含不再数字中间的点)
+        t = re.sub(r"[，。！？；、,.!?;:\"')}\[\]]+", "", t)
+        # 还原小数点
+        t = t.replace("__DOT__", ".")
+        return t.strip()
+
+    # 1. 标点驱动切分
+    # 匹配所有标点，但排除小数点
+    # 使用正则表达式，匹配中英文停顿标点
+    # 对于点号，只有当它不在两个数字之间时才作为切分点
+    split_pattern = r"[，。！？；、!?;:\"')}\[\]]|\.(?!\d)|(?<!\d)\."
+    raw_parts = re.split(split_pattern, text)
+    
+    # 清洗每个片段并过滤空值
     processed_parts = []
-    # 将分隔符与前一部分合并
-    for i in range(0, len(raw_parts) - 1, 2):
-        combined = (raw_parts[i] + raw_parts[i + 1]).strip()
-        if combined:
-            processed_parts.append(combined)
-    if len(raw_parts) % 2 == 1:
-        last_part = raw_parts[-1].strip()
-        if last_part:
-            processed_parts.append(last_part)
+    for p in raw_parts:
+        cleaned = clean_punctuation(p)
+        if cleaned:
+            processed_parts.append(cleaned)
 
     final_segments = []
     for part in processed_parts:
@@ -232,18 +249,9 @@ def split_text_smart(text: str, max_chars: int) -> list[str]:
             final_segments.append(part)
             continue
 
-        # 2. 贪婪合并词语
+        # 2. 对超长段落应用原有的分词合并逻辑
         words = list(jieba.cut(part))
-        consolidated_words = []
-        i = 0
-        while i < len(words):
-            word = words[i]
-            # 粘附标点
-            while i + 1 < len(words) and re.match(r"^[，。！？；、,.!?;:\"')}\]]+$", words[i+1]):
-                word += words[i+1]
-                i += 1
-            consolidated_words.append(word)
-            i += 1
+        consolidated_words = words # 此时 part 已无标点
 
         sub_segments = []
         current_seg = ""
@@ -254,9 +262,7 @@ def split_text_smart(text: str, max_chars: int) -> list[str]:
                 if current_seg:
                     sub_segments.append(current_seg)
                 
-                # 处理超长词
                 if len(word) > max_chars:
-                    # 如果超限不多且是唯一内容，准许超限
                     if not sub_segments and len(word) <= max_chars * 1.5:
                         sub_segments.append(word)
                         current_seg = ""
@@ -271,33 +277,30 @@ def split_text_smart(text: str, max_chars: int) -> list[str]:
         if current_seg:
             sub_segments.append(current_seg)
 
-        # 3. 全局重平衡：如果最后一段太短，尝试重新分配所有段落以求均衡
+        # 3. 全局重平衡
         if len(sub_segments) >= 2:
             last_len = len(sub_segments[-1])
-            if last_len < max_chars * 0.3:
-                # 尝试平分
+            avg_target = sum(len(s) for s in sub_segments) / len(sub_segments)
+            
+            if last_len < avg_target * 0.8 or last_len < max_chars * 0.5:
                 all_text = "".join(sub_segments)
-                # 如果总长度能被更少的段落容纳，直接重新贪婪合并
-                # (这里的 sub_segments 已经是贪婪的结果了，如果还是这么多段，说明必须这么多)
-                
-                # 重新分词并平摊到每一段
-                all_words = []
-                for s in sub_segments:
-                    all_words.extend(list(jieba.cut(s)))
-                
-                # 重新根据目标平均长度合并
-                avg_len = len(all_text) / len(sub_segments)
+                all_words = list(jieba.cut(all_text))
+                target_len = len(all_text) / len(sub_segments)
                 new_sub = []
                 temp_seg = ""
                 for w in all_words:
-                    if len(temp_seg) + len(w) <= avg_len * 1.2 and len(temp_seg) + len(w) <= max_chars:
-                        temp_seg += w
+                    if len(temp_seg) + len(w) <= target_len * 1.2 or not temp_seg:
+                        if len(temp_seg) + len(w) <= max_chars:
+                            temp_seg += w
+                        else:
+                            if temp_seg: new_sub.append(temp_seg)
+                            temp_seg = w
                     else:
                         if temp_seg: new_sub.append(temp_seg)
                         temp_seg = w
                 if temp_seg: new_sub.append(temp_seg)
                 
-                if len(new_sub) <= len(sub_segments) and all(len(s) <= max_chars * 1.5 for s in new_sub):
+                if len(new_sub) <= len(sub_segments) and len(new_sub[-1]) > last_len:
                     sub_segments = new_sub
 
         final_segments.extend(sub_segments)
