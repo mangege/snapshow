@@ -3,6 +3,7 @@ import logging
 import re
 from pathlib import Path
 
+from .utils import split_text_smart
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -705,6 +706,15 @@ class SubtitleTUI(App):
             self.push_screen(LoadConfigModal(), self.handle_load_decision)
         else:
             self.apply_user_config_defaults()
+        
+        self.warm_up_jieba()
+
+    @work(thread=True)
+    def warm_up_jieba(self):
+        """异步预热分词引擎，避免首次分屏卡顿"""
+        import jieba
+        jieba.initialize()
+        self.app.call_from_thread(self.notify, "分词引擎初始化完成", severity="information")
 
     def apply_user_config_defaults(self):
         """应用用户级配置到 UI 字段"""
@@ -974,29 +984,7 @@ class SubtitleTUI(App):
             self.preview_list.append(item)
 
     def split_text(self, text: str, max_len: int) -> list[str]:
-        parts = re.split(r"[\n。！？；]", text)
-        parts = [p.strip() for p in parts if p.strip()]
-
-        final_segments = []
-        for p in parts:
-            if len(p) <= max_len:
-                final_segments.append(p)
-            else:
-                sub_parts = re.split(r"[，、,]", p)
-                current_sub = ""
-                for sp in sub_parts:
-                    if len(current_sub) + len(sp) <= max_len:
-                        current_sub += sp + ("，" if sp != sub_parts[-1] else "")
-                    else:
-                        if current_sub:
-                            final_segments.append(current_sub.rstrip("，"))
-                        while len(sp) > max_len:
-                            final_segments.append(sp[:max_len])
-                            sp = sp[max_len:]
-                        current_sub = sp + ("，" if sp != sub_parts[-1] else "")
-                if current_sub:
-                    final_segments.append(current_sub.rstrip("，"))
-        return final_segments
+        return split_text_smart(text, max_len)
 
     def action_save(self):
         """保存当前编辑内容到 YAML 配置文件"""
