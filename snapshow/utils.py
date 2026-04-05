@@ -14,7 +14,25 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def open_file_with_system_default(path: Path | str) -> None:
+    """调用系统默认程序打开文件 (跨平台)"""
+    import subprocess
+
+    path = str(Path(path).resolve())
+    system = platform.system()
+    try:
+        if system == "Darwin":  # macOS
+            subprocess.run(["open", path], check=True)
+        elif system == "Windows":  # Windows
+            os.startfile(path)
+        else:  # Linux 及其他
+            subprocess.run(["xdg-open", path], check=True)
+    except Exception as e:
+        logger.error(f"无法打开文件 {path}: {e}")
+
+
 def find_ffmpeg() -> str:
+
     """查找可用的 ffmpeg 可执行文件路径"""
     # 先尝试 PATH
     ffmpeg = shutil.which("ffmpeg")
@@ -201,12 +219,15 @@ def temp_work_dir(prefix: str = "snapshow"):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def split_text_smart(text: str, max_chars: int) -> list[str]:
+def split_text_smart(text: str, max_chars: int) -> list[tuple[int, str]]:
     """
     智能分段算法：
     1. 标点优先强制分屏 (排除小数点)
     2. 内容清洗：移除常规标点，保留数值符号和 Emoji
     3. 长句兜底：使用 jieba 和平衡算法处理超长片段
+
+    Returns:
+        list[tuple[int, str]]: (原始起始偏移量, 清洗后的显示文本)
     """
     import jieba
 
@@ -215,94 +236,110 @@ def split_text_smart(text: str, max_chars: int) -> list[str]:
 
     def clean_punctuation(t: str) -> str:
         """清洗标点，保留数值相关符号和表情符号"""
-        # 移除常见中英文标点，但通过 lookaround 保护小数点
-        # 步骤：
-        # 1. 将所有点号暂时标记（如果是小数点）
-        # 2. 移除所有其他标点
-        # 3. 恢复小数点
-        
-        # 保护小数点：把数字中间的点替换为一个特殊占位符
         t = re.sub(r"(\d)\.(\d)", r"\1__DOT__\2", t)
-        # 移除其余标点 (包含不再数字中间的点)
         t = re.sub(r"[，。！？；、,.!?;:\"')}\[\]]+", "", t)
-        # 还原小数点
         t = t.replace("__DOT__", ".")
         return t.strip()
 
     # 1. 标点驱动切分
-    # 匹配所有标点，但排除小数点
-    # 使用正则表达式，匹配中英文停顿标点
-    # 对于点号，只有当它不在两个数字之间时才作为切分点
-    split_pattern = r"[，。！？；、!?;:\"')}\[\]]|\.(?!\d)|(?<!\d)\."
-    raw_parts = re.split(split_pattern, text)
+    split_pattern = r"([，。！？；、!?;:\"')}\[\]]|\.(?!\d)|(?<!\d)\.)"
+    # 使用捕获组保留分隔符，以便计算原始位置
+    raw_tokens = re.split(split_pattern, text)
     
-    # 清洗每个片段并过滤空值
-    processed_parts = []
-    for p in raw_parts:
-        cleaned = clean_punctuation(p)
+    parts_with_offsets = []
+    current_pos = 0
+    
+    # 将文本和其后的分隔符结合，形成初步段落
+    i = 0
+    while i < len(raw_tokens):
+        content = raw_tokens[i]
+        # 下一个是分隔符吗？
+        sep = ""
+        if i + 1 < len(raw_tokens):
+            sep = raw_tokens[i+1]
+        
+        full_raw_part = content + sep
+        cleaned = clean_punctuation(content) # 分隔符本身不计入清洗后的文本显示，但占位
+        
         if cleaned:
-            processed_parts.append(cleaned)
+            parts_with_offsets.append((current_pos, cleaned))
+        
+        current_pos += len(full_raw_part)
+        i += 2
 
-    final_segments = []
-    for part in processed_parts:
+    final_results = []
+    for start_off, part in parts_with_offsets:
         if len(part) <= max_chars:
-            final_segments.append(part)
+            final_results.append((start_off, part))
             continue
 
-        # 2. 对超长段落应用原有的分词合并逻辑
+        # 2. 对超长段落应用分词合并逻辑
         words = list(jieba.cut(part))
-        consolidated_words = words # 此时 part 已无标点
-
         sub_segments = []
         current_seg = ""
-        for word in consolidated_words:
+        
+        # 记录子片段在 part 内的相对偏移量
+        relative_pos = 0
+        
+        for word in words:
             if len(current_seg) + len(word) <= max_chars:
                 current_seg += word
             else:
                 if current_seg:
-                    sub_segments.append(current_seg)
+                    sub_segments.append((relative_pos, current_seg))
+                    relative_pos += len(current_seg)
                 
                 if len(word) > max_chars:
                     if not sub_segments and len(word) <= max_chars * 1.5:
-                        sub_segments.append(word)
+                        sub_segments.append((relative_pos, word))
+                        relative_pos += len(word)
                         current_seg = ""
                     else:
                         temp_word = word
                         while len(temp_word) > max_chars:
-                            sub_segments.append(temp_word[:max_chars])
+                            sub_segments.append((relative_pos, temp_word[:max_chars]))
+                            relative_pos += max_chars
                             temp_word = temp_word[max_chars:]
                         current_seg = temp_word
                 else:
                     current_seg = word
         if current_seg:
-            sub_segments.append(current_seg)
+            sub_segments.append((relative_pos, current_seg))
 
         # 3. 全局重平衡
         if len(sub_segments) >= 2:
-            last_len = len(sub_segments[-1])
-            avg_target = sum(len(s) for s in sub_segments) / len(sub_segments)
+            # 重平衡逻辑保持不变，但需要同步更新相对偏移
+            last_len = len(sub_segments[-1][1])
+            avg_target = sum(len(s[1]) for s in sub_segments) / len(sub_segments)
             
             if last_len < avg_target * 0.8 or last_len < max_chars * 0.5:
-                all_text = "".join(sub_segments)
+                all_text = "".join(s[1] for s in sub_segments)
                 all_words = list(jieba.cut(all_text))
                 target_len = len(all_text) / len(sub_segments)
                 new_sub = []
                 temp_seg = ""
+                curr_rel = 0
                 for w in all_words:
                     if len(temp_seg) + len(w) <= target_len * 1.2 or not temp_seg:
                         if len(temp_seg) + len(w) <= max_chars:
                             temp_seg += w
                         else:
-                            if temp_seg: new_sub.append(temp_seg)
+                            if temp_seg: 
+                                new_sub.append((curr_rel, temp_seg))
+                                curr_rel += len(temp_seg)
                             temp_seg = w
                     else:
-                        if temp_seg: new_sub.append(temp_seg)
+                        if temp_seg: 
+                            new_sub.append((curr_rel, temp_seg))
+                            curr_rel += len(temp_seg)
                         temp_seg = w
-                if temp_seg: new_sub.append(temp_seg)
+                if temp_seg: new_sub.append((curr_rel, temp_seg))
                 
-                if len(new_sub) <= len(sub_segments) and len(new_sub[-1]) > last_len:
+                if len(new_sub) <= len(sub_segments) and len(new_sub[-1][1]) > last_len:
                     sub_segments = new_sub
 
-        final_segments.extend(sub_segments)
+        # 将相对偏移转换为全局起始偏移
+        for rel_off, seg_text in sub_segments:
+            final_results.append((start_off + rel_off, seg_text))
 
-    return final_segments
+    return final_results

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import re
@@ -7,14 +8,16 @@ from .utils import (
     open_file_with_system_default,
     split_text_smart,
 )
-from textual import events, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    Checkbox,
     DirectoryTree,
     Footer,
     Header,
@@ -26,6 +29,8 @@ from textual.widgets import (
     Static,
     TextArea,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class HelpScreen(ModalScreen):
@@ -414,9 +419,9 @@ class UILogHandler(logging.Handler):
             self.log_screen.app.call_from_thread(self._update_ui, msg)
 
     def _update_ui(self, msg):
-        self.log_screen.log_buffer.write(msg + "\n")
-        self.log_screen.log_area.text = self.log_screen.log_buffer.getvalue()
-        self.log_screen.log_area.scroll_end(animate=False)
+        self.log_buffer.write(msg + "\n")
+        self.log_area.text = self.log_screen.log_buffer.getvalue()
+        self.log_area.scroll_end(animate=False)
 
 
 class GenerationLogScreen(ModalScreen):
@@ -490,6 +495,100 @@ class ImageFileTree(DirectoryTree):
         return sorted(filtered, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+class Sidebar(Vertical):
+    """侧边栏组件：包含文件树和预览图逻辑"""
+
+    class ImageSelected(Message):
+        """当图片被选中时发送的消息"""
+
+        def __init__(self, path: str, name: str) -> None:
+            self.path = path
+            self.name = name
+            super().__init__()
+
+    def compose(self) -> ComposeResult:
+        yield ImageFileTree("./")
+        with Vertical(id="sidebar_footer"):
+            yield Static("预览图 (Ctrl+V)", id="preview_btn")
+
+    @on(DirectoryTree.NodeHighlighted)
+    def on_tree_node_highlighted(self, event: DirectoryTree.NodeHighlighted) -> None:
+        """当文件树中的节点被高亮时"""
+        node = event.node
+        if node.data and hasattr(node.data, "path"):
+            path = Path(node.data.path)
+            if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+                # 通知父级应用图片已变更
+                self.post_message(self.ImageSelected(str(path.resolve()), path.name))
+                # 触发异步缩略图更新
+                self.update_thumbnail(path)
+
+    @work(exclusive=True)
+    async def update_thumbnail(self, path: Path) -> None:
+        """异步更新缩略图 Worker (占位实现)"""
+        # 后续可在此集成 ANSI 渲染逻辑
+        pass
+
+    def action_preview_image(self) -> None:
+        """预览当前选中的图片"""
+        if self.app.current_image:
+            open_file_with_system_default(self.app.current_image)
+        else:
+            self.app.notify("请先选择一张图片", severity="warning")
+
+    def on_click(self, event: events.Click) -> None:
+        """处理侧边栏内的点击，特别是预览按钮"""
+        # 兼容两种检测方式
+        if event.style.meta.get("widget") == "preview_btn" or (event.widget and event.widget.id == "preview_btn"):
+            self.action_preview_image()
+
+
+class EditorSection(Vertical):
+    """编辑器分段：包含文案编辑和项目配置"""
+
+    def compose(self) -> ComposeResult:
+        yield Label(" 请在左侧选择图片...", id="img_info")
+        yield TextArea(id="text_input")
+
+        with Horizontal(id="controls"):
+            yield Label("标题:", id="title_label")
+            yield Input(placeholder="视频标题", id="project_title_input", compact=True)
+            yield Label("用户名:", id="account_name_label")
+            yield Input(placeholder="结尾显示的用户名", id="project_account_name_input", compact=True)
+            yield Label("账号ID:", id="account_id_label")
+            yield Input(placeholder="如抖音号，显示时加 @", id="project_account_id_input", compact=True)
+            yield Label("过场(s):", id="transition_label")
+            yield Input(value="0.5", id="project_transition_duration_input", compact=True)
+
+        with Horizontal(id="controls_row2"):
+            yield Label("每屏字数:", id="char_limit_label")
+            yield Input(id="char_limit", compact=True)
+            yield Label("分辨率:", id="resolution_label")
+            yield Select(
+                options=[(label, f"{w}x{h}") for label, (w, h) in RESOLUTION_PRESETS],
+                value="1080x1920",
+                id="project_resolution_select",
+                allow_blank=False,
+                compact=True,
+            )
+            yield Label("语音:", id="voice_label")
+            yield Select(
+                options=[(label, v) for label, v in VOICE_PRESETS],
+                value="zh-CN-XiaoxiaoNeural",
+                id="project_voice_select",
+                allow_blank=False,
+                compact=True,
+            )
+            yield Checkbox("署名", value=True, id="project_powered_by_checkbox")
+
+
+class PreviewSection(Vertical):
+    """预览分段：显示切分后的字幕分段"""
+
+    def compose(self) -> ComposeResult:
+        yield ListView(id="preview_list")
+
+
 class SubtitleTUI(App):
     sidebar_hidden = reactive(False)
 
@@ -523,12 +622,32 @@ class SubtitleTUI(App):
         width: 30;
         height: 100%;
         margin-right: 1;
+        layout: vertical;
     }
 
-    #sidebar_hint {
-        padding: 0 1;
-        color: $text-muted;
-        text-style: italic;
+    #sidebar_footer {
+        height: 3;
+        border-top: double $panel;
+        background: $surface;
+        content-align: center middle;
+    }
+
+    #preview_btn {
+        width: 100%;
+        height: 1;
+        background: $primary;
+        color: $background;
+        text-style: bold;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    #preview_btn:hover {
+        background: $primary-lighten-1;
+    }
+
+    #preview_btn:active {
+        background: $primary-darken-1;
     }
 
     ImageFileTree {
@@ -633,12 +752,12 @@ class SubtitleTUI(App):
         color: $text;
     }
 
-    #title_label, #account_name_label, #account_id_label, #char_limit_label, #resolution_label, #voice_label {
+    #title_label, #account_name_label, #account_id_label, #char_limit_label, #resolution_label, #voice_label, #transition_label {
         margin-right: 1;
         color: $text;
     }
 
-    #project_title_input, #project_account_name_input, #project_account_id_input {
+    #project_title_input, #project_account_name_input, #project_account_id_input, #project_transition_duration_input {
         width: 12;
         height: 1;
         background: $background;
@@ -647,6 +766,16 @@ class SubtitleTUI(App):
         padding: 0 1;
         margin-right: 2;
     }
+
+    #project_transition_duration_input {
+        width: 6;
+    }
+
+    #project_powered_by_checkbox {
+        height: 1;
+        margin-left: 1;
+    }
+
 
     #project_resolution_select {
         height: 1;
@@ -692,6 +821,7 @@ class SubtitleTUI(App):
         Binding("ctrl+z", "undo", "撤销", show=True),
         Binding("ctrl+t", "toggle_theme", "主题", show=True),
         Binding("ctrl+b", "toggle_sidebar", "侧边栏", show=True),
+        Binding("ctrl+v", "preview_image", "预览图", show=True),
         Binding("ctrl+o", "user_config", "设置", show=True),
         Binding("f1", "show_help", "帮助", show=True),
     ]
@@ -701,13 +831,39 @@ class SubtitleTUI(App):
         self.image_data = {}
         self.current_image = None
         self.max_chars = 10
+        self._current_segments_meta = []
+        self._is_updating_selection = False
+
+    @property
+    def sidebar(self) -> Sidebar:
+        return self.query_one(Sidebar)
+
+    @property
+    def editor(self) -> EditorSection:
+        return self.query_one(EditorSection)
+
+    @property
+    def preview_section(self) -> PreviewSection:
+        return self.query_one(PreviewSection)
+
+    @property
+    def text_area(self) -> TextArea:
+        return self.query_one("#text_input", TextArea)
+
+    @property
+    def img_info(self) -> Label:
+        return self.query_one("#img_info", Label)
+
+    @property
+    def preview_list(self) -> ListView:
+        return self.query_one("#preview_list", ListView)
 
     def on_mount(self) -> None:
         self.theme = "textual-light"
         self.text_area.read_only = False
-        self.query_one("#sidebar_pane").border_title = f"图片列表 ({Path.cwd().name}) [Ctrl+I]"
-        self.query_one("#editor_section").border_title = "内容编辑 (Ctrl+E)"
-        self.query_one("#preview_section").border_title = "分段预览"
+        self.sidebar.border_title = f"图片列表 ({Path.cwd().name}) [Ctrl+I]"
+        self.editor.border_title = "内容编辑 (Ctrl+E)"
+        self.preview_section.border_title = "分段预览"
 
         self.title = f"snapshow - {Path.cwd()}"
 
@@ -715,13 +871,14 @@ class SubtitleTUI(App):
             self.push_screen(LoadConfigModal(), self.handle_load_decision)
         else:
             self.apply_user_config_defaults()
-        
+
         self.warm_up_jieba()
 
     @work(thread=True)
     def warm_up_jieba(self):
         """异步预热分词引擎，避免首次分屏卡顿"""
         import jieba
+
         jieba.initialize()
         self.app.call_from_thread(self.notify, "分词引擎初始化完成", severity="information")
 
@@ -736,8 +893,8 @@ class SubtitleTUI(App):
         self.query_one("#project_account_id_input", Input).value = project.get("account_id", "")
         self.query_one("#project_resolution_select", Select).value = project.get("resolution", "1080x1920")
         self.query_one("#project_voice_select", Select).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
-        self.max_chars = project.get("max_chars", 10)
-        self.query_one("#char_limit", Input).value = str(self.max_chars)
+        self.query_one("#project_powered_by_checkbox", Checkbox).value = project.get("powered_by", True)
+        self.query_one("#project_transition_duration_input", Input).value = str(project.get("transition_duration", 0.5))
         self.max_chars = project.get("max_chars", 10)
         self.query_one("#char_limit", Input).value = str(self.max_chars)
 
@@ -754,7 +911,6 @@ class SubtitleTUI(App):
 
         uc = load_user_config()
         uc_project = uc.get("project", {})
-        uc_voice = uc.get("voice", {})
 
         config_path = Path("project_tui.yaml")
         if not config_path.exists():
@@ -801,6 +957,8 @@ class SubtitleTUI(App):
             self.query_one("#project_account_name_input", Input).value = account_name
             self.query_one("#project_account_id_input", Input).value = account_id
             self.query_one("#project_resolution_select", Select).value = resolution
+            self.query_one("#project_powered_by_checkbox", Checkbox).value = project.get("powered_by", uc_project.get("powered_by", True))
+            self.query_one("#project_transition_duration_input", Input).value = str(project.get("transition_duration", uc_project.get("transition_duration", 0.5)))
             self.max_chars = project.get("max_chars", uc_project.get("max_chars", 10))
             self.query_one("#char_limit", Input).value = str(self.max_chars)
 
@@ -850,7 +1008,7 @@ class SubtitleTUI(App):
         self.sidebar_hidden = not self.sidebar_hidden
 
     def watch_sidebar_hidden(self, sidebar_hidden: bool) -> None:
-        sidebar = self.query_one("#sidebar_pane")
+        sidebar = self.sidebar
         sidebar.display = not sidebar_hidden
         if sidebar_hidden and sidebar.has_focus:
             self.action_focus_editor()
@@ -865,6 +1023,10 @@ class SubtitleTUI(App):
 
     def action_undo(self):
         self.text_area.undo()
+
+    def action_preview_image(self):
+        """通过侧边栏组件触发预览"""
+        self.sidebar.action_preview_image()
 
     def action_user_config(self):
         """打开用户级配置编辑界面"""
@@ -892,98 +1054,60 @@ class SubtitleTUI(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Container(id="main_container"):
-            with Vertical(id="sidebar_pane"):
-                yield ImageFileTree("./")
-                yield Static("右键图片: 预览高清原图", id="sidebar_hint")
+            yield Sidebar(id="sidebar_pane")
 
             with Vertical(id="main_panel"):
-                with Vertical(id="editor_section"):
-                    self.img_info = Label(" 请在左侧选择图片...")
-                    yield self.img_info
-                    self.text_area = TextArea(id="text_input")
-                    yield self.text_area
-
-                    with Horizontal(id="controls"):
-                        yield Label("标题:", id="title_label")
-                        yield Input(placeholder="视频标题", id="project_title_input", compact=True)
-                        yield Label("用户名:", id="account_name_label")
-                        yield Input(placeholder="结尾显示的用户名", id="project_account_name_input", compact=True)
-                        yield Label("账号ID:", id="account_id_label")
-                        yield Input(placeholder="如抖音号，显示时加 @", id="project_account_id_input", compact=True)
-
-                    with Horizontal(id="controls_row2"):
-                        yield Label("每屏字数:", id="char_limit_label")
-                        yield Input(value=str(self.max_chars), id="char_limit", compact=True)
-                        yield Label("分辨率:", id="resolution_label")
-                        yield Select(
-                            options=[(label, f"{w}x{h}") for label, (w, h) in RESOLUTION_PRESETS],
-                            value="1080x1920",
-                            id="project_resolution_select",
-                            allow_blank=False,
-                            compact=True,
-                        )
-                        yield Label("语音:", id="voice_label")
-                        yield Select(
-                            options=[(label, v) for label, v in VOICE_PRESETS],
-                            value="zh-CN-XiaoxiaoNeural",
-                            id="project_voice_select",
-                            allow_blank=False,
-                            compact=True,
-                        )
-
-                with Vertical(id="preview_section"):
-                    self.preview_list = ListView(id="preview_list")
-                    yield self.preview_list
+                yield EditorSection(id="editor_section")
+                yield PreviewSection(id="preview_section")
 
         yield Footer()
 
-    def action_focus_editor(self):
-        self.text_area.focus()
-
     def action_focus_preview(self):
-        self.query_one("#preview_list").focus()
+        self.preview_list.focus()
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        """屏蔽默认的选择事件，防止回车触发预览"""
-        pass
+    @on(Sidebar.ImageSelected)
+    def handle_image_selected(self, message: Sidebar.ImageSelected) -> None:
+        """响应侧边栏发出的图片选中消息"""
+        self.current_image = message.path
+        self.img_info.update(f"已选中: [bold $primary]{message.name}[/]")
+        self.text_area.text = self.image_data.get(self.current_image, "")
+        self.refresh_preview()
 
-    def on_tree_node_highlighted(self, event: DirectoryTree.NodeHighlighted) -> None:
-        """光标移动、单击、回车导航时：加载文案"""
-        node = event.node
-        if node.data and hasattr(node.data, "path"):
-            path = Path(node.data.path)
-            if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-                self.current_image = str(path.resolve())
-                self.img_info.update(f"已选中: [bold $primary]{path.name}[/]")
-                self.text_area.text = self.image_data.get(self.current_image, "")
-                self.refresh_preview()
-
-    def on_mouse_down(self, event: events.MouseDown) -> None:
-        """右键点击预览图片"""
-        if event.button == 3:
-            node_id = event.style.meta.get("node")
-            if node_id is not None:
-                try:
-                    tree = self.query_one(ImageFileTree)
-                    node = tree.get_node(node_id)
-                    if node and node.data and hasattr(node.data, "path"):
-                        path = Path(node.data.path)
-                        if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-                            open_file_with_system_default(path)
-                            event.stop()
-                except Exception:
-                    pass
-
+    @on(TextArea.Changed, "#text_input")
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if self.current_image:
-            self.image_data[self.current_image] = self.text_area.text
+            self.image_data[self.current_image] = event.text_area.text
             self.refresh_preview()
 
+    def get_offset_from_location(self, location: tuple[int, int]) -> int:
+        """Calculate character offset from (row, col) cursor location."""
+        row, col = location
+        lines = self.text_area.text.splitlines(keepends=True)
+        offset = 0
+        for i in range(row):
+            if i < len(lines):
+                offset += len(lines[i])
+        offset += col
+        return offset
+
+    def get_location_from_offset(self, offset: int) -> tuple[int, int]:
+        """Calculate (row, col) cursor location from character offset."""
+        lines = self.text_area.text.splitlines(keepends=True)
+        current_offset = 0
+        for row, line in enumerate(lines):
+            if current_offset + len(line) > offset:
+                return (row, offset - current_offset)
+            current_offset += len(line)
+        # Fallback to last position
+        return (len(lines) - 1 if lines else 0, len(lines[-1]) if lines else 0)
+
+    @on(Input.Changed)
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "char_limit" and event.value.isdigit():
             self.max_chars = int(event.value)
             self.refresh_preview()
 
+    @on(Select.Changed)
     def on_select_changed(self, event: Select.Changed) -> None:
         """当分辨率改变时，根据横竖屏自动调整建议字数"""
         if event.select.id == "project_resolution_select" and event.value is not None:
@@ -1009,40 +1133,126 @@ class SubtitleTUI(App):
     def refresh_preview(self):
         self.preview_list.clear()
         if not self.current_image:
+            self._current_segments_meta = []
             return
 
         # 计算全局起始偏移量 (估算之前所有图片的总时长)
         global_offset = 0.0
+        self._current_segments_meta = []
+
         for img_path, text in self.image_data.items():
             if img_path == self.current_image:
                 break
-            if not text.strip():
+            if not text:
                 continue
             prev_segments = self.split_text(text, self.max_chars)
-            for ps in prev_segments:
+            for _, ps in prev_segments:
                 global_offset += len(ps) * 0.25 + 0.5
 
-        current_text = self.text_area.text.strip()
+        current_text = self.text_area.text
         if not current_text:
             return
 
+        # 获取结构化的分段数据 (offset, text)
         segments = self.split_text(current_text, self.max_chars)
         current_time = global_offset
-        for i, seg in enumerate(segments):
+        for i, (offset, seg) in enumerate(segments):
             est_duration = len(seg) * 0.25 + 0.5
             start_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
             current_time += est_duration
             end_mmss = f"{int(current_time // 60):02d}:{int(current_time % 60):02d}"
+            
+            # 存储元数据用于精确联动
+            self._current_segments_meta.append({
+                "index": i,
+                "start_offset": offset,
+                "duration": est_duration
+            })
+
             item = ListItem(
                 Static(f"[b]{i + 1}.[/][segment-text] {seg} [/] [segment-meta]({start_mmss} - {end_mmss})[/]"),
                 classes="segment-item",
             )
             self.preview_list.append(item)
+        
+        # 刷新后即刻根据当前光标位置同步高亮
+        self._sync_preview_selection()
 
-    def split_text(self, text: str, max_len: int) -> list[str]:
-        segments = split_text_smart(text, max_len)
-        self.notify(f"分屏逻辑已触发: {len(segments)} 段", timeout=1)
-        return segments
+    def split_text(self, text: str, max_len: int) -> list[tuple[int, str]]:
+        return split_text_smart(text, max_len)
+
+    def _sync_preview_selection(self):
+        """正向联动：根据编辑器光标位置同步预览列表高亮"""
+        # 如果是点击预览列表导致的移动，或未聚焦，则跳过同步
+        if not self.text_area.has_focus:
+            return
+            
+        cursor_offset = self._get_cursor_offset()
+        target_index = 0
+        for meta in self._current_segments_meta:
+            if cursor_offset >= meta["start_offset"]:
+                target_index = meta["index"]
+            else:
+                break
+        
+        if 0 <= target_index < len(self.preview_list):
+            # 静默更新索引，不触发 Selected 消息（通过 has_focus 判定隔离）
+            self.preview_list.index = target_index
+            # 确保可见
+            try:
+                item = self.preview_list[target_index]
+                self.preview_list.scroll_to_widget(item)
+            except Exception:
+                pass
+
+    def _get_cursor_offset(self) -> int:
+        """计算编辑器当前光标的全局字符偏移量"""
+        row, col = self.text_area.cursor_location
+        # 逐行累加长度并补加换行符
+        text = self.text_area.text
+        lines = text.splitlines(keepends=True)
+        offset = 0
+        for i in range(row):
+            if i < len(lines):
+                offset += len(lines[i])
+        offset += col
+        return offset
+
+    @on(TextArea.CursorMoved, "#text_input")
+    def on_editor_cursor_moved(self, event: TextArea.CursorMoved) -> None:
+        """响应编辑器光标移动"""
+        self._sync_preview_selection()
+
+    @on(ListView.Selected)
+    def on_preview_selected(self, event: ListView.Selected) -> None:
+        """反向联动：点击预览分段时跳转编辑器光标"""
+        if not self.preview_list.has_focus:
+            return
+            
+        index = self.preview_list.index
+        if index is not None and 0 <= index < len(self._current_segments_meta):
+            meta = self._current_segments_meta[index]
+            target_offset = meta["start_offset"]
+            
+            # 将全局偏移量反算为行、列坐标
+            text = self.text_area.text
+            lines = text.splitlines(keepends=True)
+            curr_off = 0
+            target_row = 0
+            target_col = 0
+            for i, line in enumerate(lines):
+                if curr_off + len(line) > target_offset:
+                    target_row = i
+                    target_col = target_offset - curr_off
+                    break
+                curr_off += len(line)
+            else:
+                # 容错：末尾
+                target_row = max(0, len(lines) - 1)
+                target_col = len(lines[-1]) if lines else 0
+
+            self.text_area.cursor_location = (target_row, target_col)
+            self.text_area.focus()
 
     def action_save(self):
         """保存当前编辑内容到 YAML 配置文件"""
@@ -1053,6 +1263,12 @@ class SubtitleTUI(App):
         title = self.query_one("#project_title_input", Input).value
         account_name = self.query_one("#project_account_name_input", Input).value
         account_id = self.query_one("#project_account_id_input", Input).value
+        transition_duration_str = self.query_one("#project_transition_duration_input", Input).value
+        try:
+            transition_duration = float(transition_duration_str)
+        except ValueError:
+            transition_duration = 0.5
+        powered_by = self.query_one("#project_powered_by_checkbox", Checkbox).value
 
         resolution = self.query_one("#project_resolution_select", Select).value
         width, height = map(int, resolution.split("x"))
@@ -1070,7 +1286,8 @@ class SubtitleTUI(App):
                 "account_id": account_id,
                 "max_chars": self.max_chars,
                 "voice": voice,
-                "transition_duration": 0.5,
+                "transition_duration": transition_duration,
+                "powered_by": powered_by,
             },
             "images": [],
             "subtitles": [],
@@ -1085,11 +1302,11 @@ class SubtitleTUI(App):
             config_dict["images"].append({"id": img_id, "path": img_path, "text": text})
 
             segments = self.split_text(text, self.max_chars)
-            for seg in segments:
+            for offset, seg_text in segments:
                 config_dict["subtitles"].append(
                     {
                         "id": f"sub_{sub_count:03d}",
-                        "text": seg,
+                        "text": seg_text,
                         "image": img_id,
                     }
                 )

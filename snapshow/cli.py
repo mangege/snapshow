@@ -1,6 +1,7 @@
 """CLI 入口 - 命令行界面"""
 
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import click
@@ -16,31 +17,54 @@ from .user_config import (
 from .video import generate_video
 from .voice import generate_voices
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
+
+def setup_logging(verbose: bool = False):
+    """设置日志：同时输出到控制台和文件"""
+    log_level = logging.DEBUG if verbose else logging.INFO
+
+    # 根日志记录器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # 清理现有的处理程序
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    date_format = "%H:%M:%S"
+    formatter = logging.Formatter(log_format, date_format)
+
+    # 1. 控制台处理程序
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # 2. 文件处理程序 (snapshow.log)
+    try:
+        file_handler = RotatingFileHandler("snapshow.log", maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+    except Exception:
+        pass
+
+
 logger = logging.getLogger(__name__)
 
 
 @click.group()
 @click.version_option(version="0.1.0")
-def main():
+@click.option("--verbose", "-v", is_flag=True, help="显示详细日志")
+def main(verbose: bool):
     """snapshow - 根据图片和字幕生成配音视频"""
-    pass
+    setup_logging(verbose)
 
 
 @main.command()
 @click.argument("config_path", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default=None, help="输出目录")
 @click.option("--dry-run", is_flag=True, help="只显示时间线，不生成视频")
-@click.option("--verbose", "-v", is_flag=True, help="显示详细日志")
-def generate(config_path: str, output: str | None, dry_run: bool, verbose: bool):
+def generate(config_path: str, output: str | None, dry_run: bool):
     """根据配置文件生成视频"""
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
     config_path = Path(config_path)
     base_dir = config_path.parent
 
