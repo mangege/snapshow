@@ -951,6 +951,28 @@ class SubtitleTUI(App):
             self.max_chars = int(event.value)
             self.refresh_preview()
 
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """当分辨率改变时，根据横竖屏自动调整建议字数"""
+        if event.select.id == "project_resolution_select" and event.value is not None:
+            try:
+                # 解析分辨率字符串，如 "1920x1080"
+                width, height = map(int, str(event.value).split("x"))
+                if width > height:
+                    # 横屏建议 15 字
+                    self.max_chars = 15
+                    self.notify("切换为横屏，每屏字数自动建议为 15", severity="information")
+                else:
+                    # 竖屏或正方形建议 10 字
+                    self.max_chars = 10
+                    self.notify("切换为竖屏，每屏字数自动建议为 10", severity="information")
+
+                # 同步到 UI 并在预览中生效
+                self.query_one("#char_limit", Input).value = str(self.max_chars)
+                self.refresh_preview()
+            except (ValueError, IndexError):
+                # 忽略格式解析错误
+                pass
+
     def refresh_preview(self):
         self.preview_list.clear()
         if not self.current_image:
