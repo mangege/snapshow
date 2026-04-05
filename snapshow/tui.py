@@ -958,9 +958,9 @@ class SubtitleTUI(App):
                 # 解析分辨率字符串，如 "1920x1080"
                 width, height = map(int, str(event.value).split("x"))
                 if width > height:
-                    # 横屏建议 15 字
-                    self.max_chars = 15
-                    self.notify("切换为横屏，每屏字数自动建议为 15", severity="information")
+                    # 横屏建议 20 字
+                    self.max_chars = 20
+                    self.notify("切换为横屏，每屏字数自动建议为 20", severity="information")
                 else:
                     # 竖屏或正方形建议 10 字
                     self.max_chars = 10
