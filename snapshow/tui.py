@@ -3,8 +3,11 @@ import logging
 import re
 from pathlib import Path
 
-from .utils import split_text_smart
-from textual import work
+from .utils import (
+    open_file_with_system_default,
+    split_text_smart,
+)
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
@@ -522,6 +525,12 @@ class SubtitleTUI(App):
         margin-right: 1;
     }
 
+    #sidebar_hint {
+        padding: 0 1;
+        color: $text-muted;
+        text-style: italic;
+    }
+
     ImageFileTree {
         background: $background;
         color: $text;
@@ -885,6 +894,7 @@ class SubtitleTUI(App):
         with Container(id="main_container"):
             with Vertical(id="sidebar_pane"):
                 yield ImageFileTree("./")
+                yield Static("右键图片: 预览高清原图", id="sidebar_hint")
 
             with Vertical(id="main_panel"):
                 with Vertical(id="editor_section"):
@@ -934,12 +944,35 @@ class SubtitleTUI(App):
         self.query_one("#preview_list").focus()
 
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        path = event.path
-        if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-            self.current_image = str(path.resolve())
-            self.img_info.update(f"已选中: [bold $primary]{path.name}[/]")
-            self.text_area.text = self.image_data.get(self.current_image, "")
-            self.refresh_preview()
+        """屏蔽默认的选择事件，防止回车触发预览"""
+        pass
+
+    def on_tree_node_highlighted(self, event: DirectoryTree.NodeHighlighted) -> None:
+        """光标移动、单击、回车导航时：加载文案"""
+        node = event.node
+        if node.data and hasattr(node.data, "path"):
+            path = Path(node.data.path)
+            if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+                self.current_image = str(path.resolve())
+                self.img_info.update(f"已选中: [bold $primary]{path.name}[/]")
+                self.text_area.text = self.image_data.get(self.current_image, "")
+                self.refresh_preview()
+
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        """右键点击预览图片"""
+        if event.button == 3:
+            node_id = event.style.meta.get("node")
+            if node_id is not None:
+                try:
+                    tree = self.query_one(ImageFileTree)
+                    node = tree.get_node(node_id)
+                    if node and node.data and hasattr(node.data, "path"):
+                        path = Path(node.data.path)
+                        if path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+                            open_file_with_system_default(path)
+                            event.stop()
+                except Exception:
+                    pass
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if self.current_image:
