@@ -43,6 +43,8 @@ def setup_logging(verbose: bool = False):
     try:
         file_handler = RotatingFileHandler("snapshow.log", maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
         file_handler.setFormatter(formatter)
+        # 文件日志强制设置为 DEBUG，确保捕获所有异常
+        file_handler.setLevel(logging.DEBUG)
         root_logger.addHandler(file_handler)
     except Exception:
         pass
@@ -99,6 +101,7 @@ def generate(config_path: str, output: str | None, dry_run: bool):
             title=config.title,
             account_name=config.account_name,
             account_id=config.account_id,
+            max_chars=config.max_chars,
         )
         print_timeline(timeline)
 

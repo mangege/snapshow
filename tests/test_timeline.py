@@ -164,3 +164,21 @@ class TestTimelineEdgeCases:
         assert title_seg[0].image_path == "__black__"
         assert title_seg[0].end - title_seg[0].start == 1.5
         assert title_seg[0].start == 0.0
+
+    def test_title_multiline_wrapping(self):
+        from snapshow.timeline import build_timeline
+        from snapshow.config import ImageConfig, SubtitleConfig
+        from pathlib import Path
+
+        images = [ImageConfig(id="img1", path="img1.jpg", text="test")]
+        subtitles = [SubtitleConfig(id="s1", text="test", image="img1")]
+        audio_info = {"img1": (Path("img1.mp3"), 2.0), "__title__": (Path("title.mp3"), 2.0)}
+
+        title = "这是一个非常非常长的标题文字测试"
+        # Using max_chars = 5, we expect newlines in the result
+        timeline = build_timeline(images, subtitles, audio_info, title=title, max_chars=5)
+
+        title_segment = timeline[0]
+        assert title_segment.image_id == "__title__"
+        # The text should contain at least one newline
+        assert "\n" in title_segment.subtitles[0].text

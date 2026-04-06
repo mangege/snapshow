@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
+from .utils import split_text_smart
 
 
 def count_chars(text: str) -> int:
@@ -40,6 +41,7 @@ def build_timeline(
     title: str = "",
     account_name: str = "",
     account_id: str = "",
+    max_chars: int = 40,
 ) -> list[ImageSegment]:
     """
     构建完整时间线
@@ -56,9 +58,14 @@ def build_timeline(
     # 1. 插入标题片段 (黑底白字，只听声音)
     if title and "__title__" in audio_info:
         audio_path, duration = audio_info["__title__"]
+        
+        # 语义换行处理
+        title_parts = split_text_smart(title, max_chars)
+        multiline_title = "\n".join([p[1] for p in title_parts])
+        
         sub_segment = SubtitleSegment(
             id="__title__",
-            text=title,
+            text=multiline_title,
             start=current_time,
             end=current_time + duration,
             audio_path=str(audio_path),

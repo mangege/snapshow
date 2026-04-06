@@ -419,9 +419,9 @@ class UILogHandler(logging.Handler):
             self.log_screen.app.call_from_thread(self._update_ui, msg)
 
     def _update_ui(self, msg):
-        self.log_buffer.write(msg + "\n")
-        self.log_area.text = self.log_screen.log_buffer.getvalue()
-        self.log_area.scroll_end(animate=False)
+        self.log_screen.log_buffer.write(msg + "\n")
+        self.log_screen.log_area.text = self.log_screen.log_buffer.getvalue()
+        self.log_screen.log_area.scroll_end(animate=False)
 
 
 class GenerationLogScreen(ModalScreen):
@@ -639,15 +639,10 @@ class SubtitleTUI(App):
         color: $background;
         text-style: bold;
         text-align: center;
-        cursor: pointer;
     }
 
     #preview_btn:hover {
         background: $primary-lighten-1;
-    }
-
-    #preview_btn:active {
-        background: $primary-darken-1;
     }
 
     ImageFileTree {
@@ -1218,9 +1213,9 @@ class SubtitleTUI(App):
         offset += col
         return offset
 
-    @on(TextArea.CursorMoved, "#text_input")
-    def on_editor_cursor_moved(self, event: TextArea.CursorMoved) -> None:
-        """响应编辑器光标移动"""
+    @on(TextArea.SelectionChanged, "#text_input")
+    def on_editor_selection_changed(self, event: TextArea.SelectionChanged) -> None:
+        """响应编辑器光标移动或选区改变"""
         self._sync_preview_selection()
 
     @on(ListView.Selected)
@@ -1389,6 +1384,7 @@ class SubtitleTUI(App):
                     title=config.title,
                     account_name=config.account_name,
                     account_id=config.account_id,
+                    max_chars=config.max_chars,
                 )
 
                 with temp_work_dir() as work_dir:
@@ -1398,6 +1394,7 @@ class SubtitleTUI(App):
 
         except Exception as e:
             msg = str(e)
+            logger.error(f"视频生成任务异常: {msg}", exc_info=True)
             log_screen.app.call_from_thread(log_screen.set_finished, False, msg)
             self.app.call_from_thread(self.notify, f"生成失败: {msg}", severity="error")
         finally:

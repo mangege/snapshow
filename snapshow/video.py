@@ -95,12 +95,17 @@ def _resolve_font(font_name: str) -> tuple[str, str]:
 
 
 def _escape_text(text: str) -> str:
-    """转义 drawtext 滤镜中的特殊字符"""
+    """
+    针对 FFmpeg drawtext 滤镜精修文本转义。
+    适用于单引号包裹的情况。
+    """
+    if not text:
+        return ""
+    # 1. 基础转义：反斜杠和单引号
     text = text.replace("\\", "\\\\")
-    text = text.replace("'", "'\\''")
-    text = text.replace(":", "\\:")
-    text = text.replace(",", "\\,")
-    text = text.replace("%", "\\%")
+    text = text.replace("'", "\\'")
+    # 2. 扩展转义：百分号 (针对 expansion=normal)
+    text = text.replace("%", "%%")
     return text
 
 
@@ -155,6 +160,7 @@ def create_image_segment_video(
     config: ProjectConfig,
     output_path: Path,
     base_dir: Path,
+    work_dir: Path,
 ) -> None:
     """使用 ffmpeg 为单个图片片段创建视频（含字幕渲染）"""
     duration = segment.end - segment.start
@@ -196,15 +202,22 @@ def create_image_segment_video(
         fontsize: float,
         fontcolor: str = "white",
         border: bool = False,
-        x: str = "(w-tw)/2",
-        y: str = "(h-th)/2",
+        x: str = "(w-text_w)/2",
+        y: str = "(h-text_h)/2",
         enable: str = "",
+        text_align: str = "",
+        is_file: bool = False,
     ) -> str:
+        # 如果是文件路径，使用 textfile 参数
+        text_param = f"textfile='{text}'" if is_file else f"text='{text}'"
+        
         parts = [
-            f"drawtext={font_param}='{escaped_font_value}':text='{text}'",
+            f"drawtext={font_param}='{escaped_font_value}':{text_param}",
             f"fontsize={fontsize}",
             f"fontcolor={fontcolor}",
         ]
+        if text_align:
+            parts.append(f"text_align={text_align}")
         if border:
             parts.extend(
                 [
@@ -219,8 +232,21 @@ def create_image_segment_video(
 
     # 特殊处理标题和账号
     if segment.image_id == "__title__":
-        text = _escape_text(config.title)
-        filters.append(_make_drawtext(text, style.font_size * 1.5))
+        title_text = segment.subtitles[0].text if segment.subtitles else config.title
+        # 彻底解决换行符方块问题：按行拆分，生成多个独立 drawtext 滤镜
+        lines = title_text.split("\n")
+        total_lines = len(lines)
+        line_height = style.font_size * 1.8 # 估算行高，包含行间距
+        
+        for i, line in enumerate(lines):
+            # 精准计算每一行的 y 坐标，实现整体居中
+            # 逻辑：起始 y = 屏幕中心 - 总高度的一半 + 当前行的偏移
+            y_offset = (i - (total_lines - 1) / 2) * line_height
+            y_formula = f"(h-text_h)/2 + {y_offset}"
+            
+            text = _escape_text(line)
+            if text:
+                filters.append(_make_drawtext(text, style.font_size * 1.5, y=y_formula))
 
     elif segment.image_id == "__account__":
         # 显示用户名和 @账号ID（两个独立 drawtext，避免换行符转义问题）
@@ -395,7 +421,7 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
             adjusted_segment = segment
 
         clip_path = clips_dir / f"clip_{i:03d}.mp4"
-        create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir)
+        create_image_segment_video(adjusted_segment, config.style, config, clip_path, base_dir, work_dir)
         video_paths.append(clip_path)
 
         # 收集音频路径并去重，保持顺序
