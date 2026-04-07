@@ -34,20 +34,40 @@
 
 ## 安装
 
+### 1. 使用 pip 安装 (推荐)
+
+直接从 PyPI 安装最新正式版：
+
+```bash
+pip install snapshow
+```
+
+或者安装最新的开发预览版：
+
+```bash
+pip install --pre snapshow
+```
+
+### 2. 本地开发安装
+
+如果你需要修改源码或参与开发：
+
 ```bash
 # 克隆仓库
-git clone <repository-url>
+git clone https://github.com/mangege/snapshow
 cd snapshow
 
-# 创建虚拟环境并安装依赖
+# 创建虚拟环境并安装开发依赖
 python -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # .venv\Scripts\activate  # Windows
 
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 ## 快速开始
+
+安装完成后，你可以直接使用 `snapshow` 命令。
 
 ### 1. 使用交互式界面 (推荐)
 
@@ -55,10 +75,10 @@ pip install -r requirements.txt
 
 ```bash
 # 在当前目录启动
-python -m snapshow ui
+snapshow ui
 
 # 或者指定一个项目目录启动
-python -m snapshow ui ./my_project
+snapshow ui ./my_project
 ```
 
 - **核心快捷键**：
@@ -78,10 +98,10 @@ python -m snapshow ui ./my_project
 
 ```bash
 # 预览时间线
-python -m snapshow preview project.yaml
+snapshow preview project.yaml
 
 # 生成视频
-python -m snapshow generate project.yaml
+snapshow generate project.yaml
 ```
 
 ## 智能字幕示例
