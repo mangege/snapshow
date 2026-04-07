@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "snapshow"
-version = "0.1.0"
+version = "0.1.1"
 description = "多张图片幻灯片加配音生成短视频 (专业的图文成片交付引擎)"
 readme = "README.md"
 authors = [
@@ -46,6 +46,7 @@ snapshow = "snapshow.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-asyncio>=0.20.0",
     "ruff>=0.1.0",
 ]
 
@@ -61,3 +62,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
