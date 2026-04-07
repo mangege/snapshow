@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel", "setuptools_scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "snapshow"
-version = "0.1.1"
 description = "多张图片幻灯片加配音生成短视频 (专业的图文成片交付引擎)"
 readme = "README.md"
+dynamic = ["version"]
 authors = [
     { name = "Snapshow Contributors" },
 ]
@@ -30,6 +30,9 @@ dependencies = [
     "textual>=0.50.0",
     "jieba>=0.42.1",
 ]
+
+[tool.setuptools_scm]
+# 启用 setuptools_scm 自动发现
 
 [tool.setuptools.packages.find]
 include = ["snapshow*"]
