@@ -28,7 +28,7 @@ def open_file_with_system_default(path: Path | str) -> None:
         else:  # Linux 及其他
             subprocess.run(["xdg-open", path], check=True)
     except Exception as e:
-        logger.error(f"无法打开文件 {path}: {e}")
+        logger.error(f"无法打开文件 {path}", exc_info=True)
 
 
 def find_ffmpeg() -> str:
@@ -191,8 +191,8 @@ def _font_exists(font_name: str, system: str) -> bool:
                             name, _, _ = winreg.EnumValue(key, i)
                             if font_name.lower() in name.lower():
                                 return True
-                except (FileNotFoundError, OSError):
-                    pass
+                except (FileNotFoundError, OSError) as e:
+                    logger.debug(f"Windows 注册表查询异常 ({font_name}): {e}", exc_info=True)
 
             # fallback: 检查字体文件是否存在
             font_dir = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
@@ -203,8 +203,8 @@ def _font_exists(font_name: str, system: str) -> bool:
 
             return False
 
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        logger.debug(f"字体存在性检查异常 ({font_name}): {e}", exc_info=True)
 
     return False
 

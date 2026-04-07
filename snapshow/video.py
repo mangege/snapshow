@@ -3,6 +3,7 @@
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import replace
@@ -21,7 +22,9 @@ def _run_ffmpeg(cmd: list[str], description: str = "FFmpeg") -> None:
     try:
         subprocess.run(cmd, capture_output=True, check=True, text=True)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"{description} 命令失败: {' '.join(cmd)}\nstderr: {e.stderr}") from e
+        full_cmd = " ".join(cmd)
+        logger.error(f"{description} 执行失败!\n命令: {full_cmd}\n错误输出: {e.stderr}", exc_info=True)
+        raise RuntimeError(f"{description} 命令失败: {full_cmd}\nstderr: {e.stderr}") from e
 
 
 @lru_cache(maxsize=1)
@@ -85,11 +88,11 @@ def _resolve_font(font_name: str) -> tuple[str, str]:
                             if font_file.suffix.lower() == ".ttc":
                                 return ("font", font_name)
                             return ("fontfile", str(font_file))
-            except (FileNotFoundError, OSError):
-                pass
+            except (FileNotFoundError, OSError) as e:
+                logger.debug(f"Windows 注册表字体查询异常: {e}", exc_info=True)
 
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
-        pass
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.debug(f"字体解析过程异常: {e}", exc_info=True)
 
     return ("font", font_name)
 
@@ -113,7 +116,7 @@ def _escape_text(text: str) -> str:
 def _detect_gpu_encoder() -> str | None:
     """检测可用的 GPU 编码器
     按优先级检测：nvidia -> qsv -> vaapi -> amd -> none
-    返回编码器名称或 None（使用 CPU）
+    返回编码器名称 or None（使用 CPU）
     """
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
@@ -147,8 +150,8 @@ def _detect_gpu_encoder() -> str | None:
             logger.info("GPU encoder detected: h264_videotoolbox")
             return "h264_videotoolbox"
 
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.debug(f"GPU 编码器检测过程异常: {e}", exc_info=True)
 
     logger.info("No GPU encoder detected, using CPU encoding")
     return None
@@ -440,9 +443,20 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
         audio_only = work_dir / "audio_only.mp3"
         merge_audio_ffmpeg(all_audio_paths, audio_only)
 
-        # 3. 最终封装
-        output_name = f"{config.name}.mp4"
-        final_output = work_dir / output_name
+    # 3. 最终封装
+    # 优先使用 title 作为文件名，若为空则回退到 name
+    base_name = config.title.strip() if config.title else config.name
+    # 过滤掉不合法的路径字符
+    output_name = re.sub(r'[\\/*?:"<>|]', "", base_name)
+    if not output_name:
+        output_name = config.name
+    output_name += ".mp4"
+    
+    final_output = work_dir / output_name
+
+    if all_audio_paths:
+        audio_only = work_dir / "audio_only.mp3"
+        merge_audio_ffmpeg(all_audio_paths, audio_only)
 
         ffmpeg = find_ffmpeg()
         _run_ffmpeg(
@@ -466,10 +480,11 @@ def generate_video(config: ProjectConfig, timeline: list[ImageSegment], work_dir
             "最终封装",
         )
     else:
-        final_output = video_only
+        # 重命名 video_only 为目标名称
+        video_only.rename(final_output)
 
     # 拷贝到最终目录
-    dest_path = Path(config.output_dir) / f"{config.name}.mp4"
+    dest_path = Path(config.output_dir) / output_name
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(final_output, dest_path)
 

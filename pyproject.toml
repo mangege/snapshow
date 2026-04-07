@@ -5,15 +5,40 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "snapshow"
 version = "0.1.0"
-description = "多张图片幻灯片加配音生成短视频"
+description = "多张图片幻灯片加配音生成短视频 (专业的图文成片交付引擎)"
+readme = "README.md"
+authors = [
+    { name = "Snapshow Contributors" },
+]
+license = "MIT"
 requires-python = ">=3.10"
+keywords = ["video", "slideshow", "tts", "edge-tts", "subtitle", "ffmpeg"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video :: Conversion",
+]
 dependencies = [
     "pyyaml>=6.0",
     "edge-tts>=6.1.0",
     "click>=8.0",
     "pillow>=10.0",
     "textual>=0.50.0",
+    "jieba>=0.42.1",
 ]
+
+[tool.setuptools.packages.find]
+include = ["snapshow*"]
+exclude = ["tests*", "docs*", "examples*", "output*"]
+
+[project.urls]
+Homepage = "https://github.com/mangege/snapshow"
+Repository = "https://github.com/mangege/snapshow"
+Issues = "https://github.com/mangege/snapshow/issues"
 
 [project.scripts]
 snapshow = "snapshow.cli:main"

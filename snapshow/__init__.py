@@ -11,6 +11,8 @@ from snapshow.utils import find_ffmpeg, find_ffprobe, find_zh_font
 from snapshow.video import generate_video
 from snapshow.voice import generate_voices
 
+__version__ = "0.1.0"
+
 __all__ = [
     "ProjectConfig",
     "SubtitleConfig",

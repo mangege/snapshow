@@ -381,28 +381,32 @@ class UserConfigEdit(ModalScreen):
     def save_user_config(self) -> None:
         from .user_config import save_user_config
 
-        resolution = self.query_one("#uc_resolution_select", Select).value
+        try:
+            resolution = self.query_one("#uc_resolution_select", Select).value
 
-        config = {
-            "project": {
-                "account_name": self.query_one("#uc_account_name_input", Input).value,
-                "account_id": self.query_one("#uc_account_id_input", Input).value,
-                "powered_by": self.query_one("#uc_powered_by", Select).value,
-                "fps": int(self.query_one("#uc_fps_input", Input).value or 30),
-                "resolution": resolution,
-                "max_chars": int(self.query_one("#uc_max_chars_input", Input).value or 10),
-            },
-            "voice": {
-                "engine": "edge-tts",
-                "voice": self.query_one("#uc_voice_select", Select).value,
-                "rate": self.query_one("#uc_rate_input", Input).value,
-                "volume": self.query_one("#uc_volume_input", Input).value,
-                "pitch": self.query_one("#uc_pitch_input", Input).value,
-            },
-        }
-        save_user_config(config)
-        self.notify("用户配置已保存至 ~/.config/snapshow/config.yaml", severity="information")
-        self.app.pop_screen()
+            config = {
+                "project": {
+                    "account_name": self.query_one("#uc_account_name_input", Input).value,
+                    "account_id": self.query_one("#uc_account_id_input", Input).value,
+                    "powered_by": self.query_one("#uc_powered_by", Select).value,
+                    "fps": int(self.query_one("#uc_fps_input", Input).value or 30),
+                    "resolution": resolution,
+                    "max_chars": int(self.query_one("#uc_max_chars_input", Input).value or 10),
+                },
+                "voice": {
+                    "engine": "edge-tts",
+                    "voice": self.query_one("#uc_voice_select", Select).value,
+                    "rate": self.query_one("#uc_rate_input", Input).value,
+                    "volume": self.query_one("#uc_volume_input", Input).value,
+                    "pitch": self.query_one("#uc_pitch_input", Input).value,
+                },
+            }
+            save_user_config(config)
+            self.notify("用户配置已保存至 ~/.config/snapshow/config.yaml", severity="information")
+            self.app.pop_screen()
+        except Exception as e:
+            logger.error(f"保存用户配置失败: {e}", exc_info=True)
+            self.notify(f"保存用户配置失败: {e}", severity="error")
 
 
 class UILogHandler(logging.Handler):
@@ -526,8 +530,11 @@ class Sidebar(Vertical):
     @work(exclusive=True)
     async def update_thumbnail(self, path: Path) -> None:
         """异步更新缩略图 Worker (占位实现)"""
-        # 后续可在此集成 ANSI 渲染逻辑
-        pass
+        try:
+            # 后续可在此集成 ANSI 渲染逻辑
+            pass
+        except Exception as e:
+            logger.error(f"更新缩略图失败: {e}", exc_info=True)
 
     def action_preview_image(self) -> None:
         """预览当前选中的图片"""
@@ -872,33 +879,44 @@ class SubtitleTUI(App):
     @work(thread=True)
     def warm_up_jieba(self):
         """异步预热分词引擎，避免首次分屏卡顿"""
-        import jieba
+        try:
+            import jieba
 
-        jieba.initialize()
-        self.app.call_from_thread(self.notify, "分词引擎初始化完成", severity="information")
+            jieba.initialize()
+            self.app.call_from_thread(self.notify, "分词引擎初始化完成", severity="information")
+        except Exception as e:
+            logger.error(f"Jieba 初始化失败: {e}", exc_info=True)
 
     def apply_user_config_defaults(self):
         """应用用户级配置到 UI 字段"""
         from .user_config import load_user_config
 
-        uc = load_user_config()
-        project = uc.get("project", {})
-        voice = uc.get("voice", {})
-        self.query_one("#project_account_name_input", Input).value = project.get("account_name", "")
-        self.query_one("#project_account_id_input", Input).value = project.get("account_id", "")
-        self.query_one("#project_resolution_select", Select).value = project.get("resolution", "1080x1920")
-        self.query_one("#project_voice_select", Select).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
-        self.query_one("#project_powered_by_checkbox", Checkbox).value = project.get("powered_by", True)
-        self.query_one("#project_transition_duration_input", Input).value = str(project.get("transition_duration", 0.5))
-        self.max_chars = project.get("max_chars", 10)
-        self.query_one("#char_limit", Input).value = str(self.max_chars)
+        try:
+            uc = load_user_config()
+            project = uc.get("project", {})
+            voice = uc.get("voice", {})
+            self.query_one("#project_account_name_input", Input).value = project.get("account_name", "")
+            self.query_one("#project_account_id_input", Input).value = project.get("account_id", "")
+            self.query_one("#project_resolution_select", Select).value = project.get("resolution", "1080x1920")
+            self.query_one("#project_voice_select", Select).value = voice.get("voice", "zh-CN-XiaoxiaoNeural")
+            self.query_one("#project_powered_by_checkbox", Checkbox).value = project.get("powered_by", True)
+            self.query_one("#project_transition_duration_input", Input).value = str(project.get("transition_duration", 0.5))
+            self.max_chars = project.get("max_chars", 10)
+            self.query_one("#char_limit", Input).value = str(self.max_chars)
+        except Exception as e:
+            logger.error(f"应用用户默认配置失败: {e}", exc_info=True)
+            self.notify(f"加载用户默认配置失败: {e}", severity="error")
 
     def handle_load_decision(self, should_load: bool):
-        if should_load:
-            self.load_initial_config()
-        else:
-            self.apply_user_config_defaults()
-            self.notify("已开始新项目 (使用用户默认配置)")
+        try:
+            if should_load:
+                self.load_initial_config()
+            else:
+                self.apply_user_config_defaults()
+                self.notify("已开始新项目 (使用用户默认配置)")
+        except Exception as e:
+            logger.error(f"处理加载决策失败: {e}", exc_info=True)
+            self.notify(f"项目初始化失败: {e}", severity="error")
 
     def load_initial_config(self):
         """尝试从 project_tui.yaml 加载配置，缺失字段以用户级配置补齐"""
@@ -994,7 +1012,8 @@ class SubtitleTUI(App):
             self.notify(f"已从 {config_path} 加载现有配置")
             self.refresh_preview()
         except Exception as e:
-            self.notify(f"加载初始配置失败: {str(e)}", severity="warning")
+            logger.error(f"加载初始配置失败: {e}", exc_info=True)
+            self.notify(f"加载初始配置失败: {e}", severity="warning")
 
     def action_show_help(self):
         self.push_screen(HelpScreen())
@@ -1255,65 +1274,69 @@ class SubtitleTUI(App):
             self.notify("没有可保存的内容", severity="warning")
             return
 
-        title = self.query_one("#project_title_input", Input).value
-        account_name = self.query_one("#project_account_name_input", Input).value
-        account_id = self.query_one("#project_account_id_input", Input).value
-        transition_duration_str = self.query_one("#project_transition_duration_input", Input).value
         try:
-            transition_duration = float(transition_duration_str)
-        except ValueError:
-            transition_duration = 0.5
-        powered_by = self.query_one("#project_powered_by_checkbox", Checkbox).value
+            title = self.query_one("#project_title_input", Input).value
+            account_name = self.query_one("#project_account_name_input", Input).value
+            account_id = self.query_one("#project_account_id_input", Input).value
+            transition_duration_str = self.query_one("#project_transition_duration_input", Input).value
+            try:
+                transition_duration = float(transition_duration_str)
+            except ValueError:
+                transition_duration = 0.5
+            powered_by = self.query_one("#project_powered_by_checkbox", Checkbox).value
 
-        resolution = self.query_one("#project_resolution_select", Select).value
-        width, height = map(int, resolution.split("x"))
-        voice = self.query_one("#project_voice_select", Select).value
+            resolution = self.query_one("#project_resolution_select", Select).value
+            width, height = map(int, resolution.split("x"))
+            voice = self.query_one("#project_voice_select", Select).value
 
-        config_dict = {
-            "project": {
-                "name": "tui_project",
-                "width": width,
-                "height": height,
-                "fps": 30,
-                "output_dir": "./output",
-                "title": title,
-                "account_name": account_name,
-                "account_id": account_id,
-                "max_chars": self.max_chars,
-                "voice": voice,
-                "transition_duration": transition_duration,
-                "powered_by": powered_by,
-            },
-            "images": [],
-            "subtitles": [],
-        }
+            config_dict = {
+                "project": {
+                    "name": "tui_project",
+                    "width": width,
+                    "height": height,
+                    "fps": 30,
+                    "output_dir": "./output",
+                    "title": title,
+                    "account_name": account_name,
+                    "account_id": account_id,
+                    "max_chars": self.max_chars,
+                    "voice": voice,
+                    "transition_duration": transition_duration,
+                    "powered_by": powered_by,
+                },
+                "images": [],
+                "subtitles": [],
+            }
 
-        sub_count = 1
-        for img_path, text in self.image_data.items():
-            if not text.strip():
-                continue
+            sub_count = 1
+            for img_path, text in self.image_data.items():
+                if not text.strip():
+                    continue
 
-            img_id = Path(img_path).stem
-            config_dict["images"].append({"id": img_id, "path": img_path, "text": text})
+                img_id = Path(img_path).stem
+                config_dict["images"].append({"id": img_id, "path": img_path, "text": text})
 
-            segments = self.split_text(text, self.max_chars)
-            for offset, seg_text in segments:
-                config_dict["subtitles"].append(
-                    {
-                        "id": f"sub_{sub_count:03d}",
-                        "text": seg_text,
-                        "image": img_id,
-                    }
-                )
-                sub_count += 1
+                segments = self.split_text(text, self.max_chars)
+                for offset, seg_text in segments:
+                    config_dict["subtitles"].append(
+                        {
+                            "id": f"sub_{sub_count:03d}",
+                            "text": seg_text,
+                            "image": img_id,
+                        }
+                    )
+                    sub_count += 1
 
-        save_path = "project_tui.yaml"
-        import yaml
+            save_path = "project_tui.yaml"
+            import yaml
 
-        with open(save_path, "w", encoding="utf-8") as f:
-            yaml.dump(config_dict, f, allow_unicode=True, sort_keys=False)
+            with open(save_path, "w", encoding="utf-8") as f:
+                yaml.dump(config_dict, f, allow_unicode=True, sort_keys=False)
 
-        self.notify(f"配置已保存至 {save_path}", severity="information")
+            self.notify(f"配置已保存至 {save_path}", severity="information")
+        except Exception as e:
+            logger.error(f"保存配置失败: {e}", exc_info=True)
+            self.notify(f"保存配置失败: {e}", severity="error")
 
     async def action_generate(self):
         """异步调用核心逻辑生成视频"""
@@ -1332,13 +1355,12 @@ class SubtitleTUI(App):
 
         root_logger = logging.getLogger()
         root_logger.addHandler(ui_handler)
-        root_logger.setLevel(logging.INFO)
+        # root_logger.setLevel(logging.INFO) # Keep existing root level if any
 
         for name in ["snapshow.video", "snapshow.voice", "snapshow"]:
-            logger = logging.getLogger(name)
-            logger.addHandler(ui_handler)
-            logger.setLevel(logging.INFO)
-            logger.propagate = False
+            l = logging.getLogger(name)
+            l.setLevel(logging.INFO)
+            l.propagate = True  # Ensure logs reach root logger for file and UI logging
 
         try:
             from .config import load_config, validate_config
@@ -1399,8 +1421,6 @@ class SubtitleTUI(App):
             self.app.call_from_thread(self.notify, f"生成失败: {msg}", severity="error")
         finally:
             root_logger.removeHandler(ui_handler)
-            for name in ["snapshow.video", "snapshow.voice", "snapshow"]:
-                logging.getLogger(name).removeHandler(ui_handler)
 
 
 if __name__ == "__main__":

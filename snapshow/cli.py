@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from . import __version__
 from .config import load_config, validate_config
 from .timeline import build_timeline, print_timeline
 from .user_config import (
@@ -18,8 +19,8 @@ from .video import generate_video
 from .voice import generate_voices
 
 
-def setup_logging(verbose: bool = False):
-    """设置日志：同时输出到控制台和文件"""
+def setup_logging(verbose: bool = False, log_to_console: bool = True):
+    """设置日志：可选输出到控制台，始终输出到文件"""
     log_level = logging.DEBUG if verbose else logging.INFO
 
     # 根日志记录器
@@ -34,12 +35,13 @@ def setup_logging(verbose: bool = False):
     date_format = "%H:%M:%S"
     formatter = logging.Formatter(log_format, date_format)
 
-    # 1. 控制台处理程序
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    root_logger.addHandler(console_handler)
+    # 1. 控制台处理程序 (仅当 log_to_console 为 True 时)
+    if log_to_console:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
 
-    # 2. 文件处理程序 (snapshow.log)
+    # 2. 文件处理程序 (snapshow.log) - 始终开启
     try:
         file_handler = RotatingFileHandler("snapshow.log", maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
         file_handler.setFormatter(formatter)
@@ -54,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version=__version__)
 @click.option("--verbose", "-v", is_flag=True, help="显示详细日志")
 def main(verbose: bool):
     """snapshow - 根据图片和字幕生成配音视频"""
@@ -150,9 +152,14 @@ def voices():
 
 @main.command()
 @click.argument("path", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=".")
-def ui(path: str):
+@click.pass_context
+def ui(ctx, path: str):
     """启动 TUI 终端交互界面"""
     import os
+
+    # TUI 模式下禁用控制台输出，避免破坏界面
+    verbose = ctx.parent.params.get("verbose", False)
+    setup_logging(verbose=verbose, log_to_console=False)
 
     abs_path = os.path.abspath(path)
     os.chdir(abs_path)

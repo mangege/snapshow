@@ -74,7 +74,7 @@ async def generate_voice_async(
 
                 await asyncio.sleep(wait_time)
             else:
-                logger.error(f"语音生成在 {MAX_RETRIES} 次尝试后最终失败: {str(e)}")
+                logger.error("语音生成在多次重试后最终失败", exc_info=True)
 
     raise RuntimeError(f"语音生成最终失败 ({MAX_RETRIES} 次尝试): {str(last_exception)}")
 
